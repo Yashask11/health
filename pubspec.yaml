@@ -1,0 +1,37 @@
+name: health
+description: A new Flutter project.
+
+# The following line prevents the package from being accidentally published to pub.dev
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  image_picker: ^1.0.7
+
+
+  # Add your dependencies here
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+
+  uses-material-design: true
+
+  assets:
+    - assets/admin.png
+    - assets/donor.png
+    - assets/receiver.png
+    - assets/health.jpg
+    - assets/homescreen.png
+    - assets/logo.jpg
+    - assets/dumy.jpg
