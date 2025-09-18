@@ -16,10 +16,14 @@ class _DonorFormPageState extends State<DonorForm> {
   final TextEditingController _itemNameController = TextEditingController();
   final TextEditingController _itemQuantityController = TextEditingController();
   final TextEditingController _expiryDateController = TextEditingController();
+  final TextEditingController _donorNameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _conditionController = TextEditingController();
 
   File? _imageFile;
+  bool _isAgreed = false;
+  DonationType _selectedType = DonationType.medicine; // default medicine
 
   Future<void> _pickImage() async {
     final pickedFile =
@@ -32,10 +36,11 @@ class _DonorFormPageState extends State<DonorForm> {
   }
 
   Future<void> _pickExpiryDate() async {
+    DateTime now = DateTime.now();
     DateTime? pickedDate = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now(),
+      initialDate: now.add(const Duration(days: 180)),
+      firstDate: now.add(const Duration(days: 180)),
       lastDate: DateTime(2100),
     );
 
@@ -49,17 +54,34 @@ class _DonorFormPageState extends State<DonorForm> {
 
   void _submitForm() {
     if (_formKey.currentState!.validate()) {
-      // ✅ Create a Donation object
+      if (_selectedType == DonationType.medicine && !_isAgreed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+            Text("⚠️ Please confirm medicine safety before submitting."),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+
       final donation = Donation(
+        type: _selectedType,
         itemName: _itemNameController.text,
         quantity: int.tryParse(_itemQuantityController.text) ?? 0,
-        expiryDate: _expiryDateController.text,
-        donorName: _addressController.text, // using address as donor name
+        donorName: _donorNameController.text,
         phone: _phoneController.text,
-        imageFile: _imageFile, // can be null
+        address: _addressController.text,
+        available: 1,
+        imageFile: _imageFile,
+        expiryDate: _selectedType == DonationType.medicine
+            ? DateTime.tryParse(_expiryDateController.text)
+            : null,
+        isConfirmed: _selectedType == DonationType.medicine ? _isAgreed : null,
+        condition:
+        _selectedType == DonationType.equipment ? _conditionController.text : null,
       );
 
-      // ✅ Return donation to HomeScreen
       Navigator.pop(context, donation);
     }
   }
@@ -81,11 +103,7 @@ class _DonorFormPageState extends State<DonorForm> {
         width: double.infinity,
         height: double.infinity,
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+          color: Color(0xFFBBDEFB), // very light blue background
         ),
         child: SafeArea(
           child: Column(
@@ -99,6 +117,39 @@ class _DonorFormPageState extends State<DonorForm> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          DropdownButtonFormField<DonationType>(
+                            value: _selectedType,
+                            decoration: InputDecoration(
+                              labelText: "Donation Type",
+                              labelStyle: const TextStyle(color: Colors.black),
+                              prefixIcon:
+                              const Icon(Icons.category, color: Colors.black),
+                              filled: true,
+                              fillColor: Colors.white, // white block
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(18),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                            dropdownColor: Colors.white,
+                            items: const [
+                              DropdownMenuItem(
+                                value: DonationType.medicine,
+                                child: Text("Medicine"),
+                              ),
+                              DropdownMenuItem(
+                                value: DonationType.equipment,
+                                child: Text("Equipment"),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              setState(() {
+                                _selectedType = value!;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 16),
+
                           _buildTextField(
                             controller: _itemNameController,
                             label: "Item Name",
@@ -110,17 +161,74 @@ class _DonorFormPageState extends State<DonorForm> {
                             label: "Item Quantity",
                             icon: Icons.format_list_numbered,
                             keyboardType: TextInputType.number,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return "Enter Item Quantity";
+                              }
+                              if (int.tryParse(value) == null ||
+                                  int.parse(value) <= 0) {
+                                return "Quantity must be greater than 0";
+                              }
+                              return null;
+                            },
                           ),
                           const SizedBox(height: 16),
-                          GestureDetector(
-                            onTap: _pickExpiryDate,
-                            child: AbsorbPointer(
-                              child: _buildTextField(
-                                controller: _expiryDateController,
-                                label: "Expiry Date",
-                                icon: Icons.calendar_today,
+
+                          if (_selectedType == DonationType.medicine) ...[
+                            GestureDetector(
+                              onTap: _pickExpiryDate,
+                              child: AbsorbPointer(
+                                child: _buildTextField(
+                                  controller: _expiryDateController,
+                                  label: "Expiry Date",
+                                  icon: Icons.calendar_today,
+                                ),
                               ),
                             ),
+                            const Padding(
+                              padding: EdgeInsets.only(top: 4),
+                              child: Text(
+                                "⚠️ Please select a date at least 6 months ahead.",
+                                style: TextStyle(
+                                    color: Colors.black54, fontSize: 12),
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                Checkbox(
+                                  value: _isAgreed,
+                                  activeColor: Colors.blueAccent,
+                                  checkColor: Colors.white,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _isAgreed = value ?? false;
+                                    });
+                                  },
+                                ),
+                                const Expanded(
+                                  child: Text(
+                                    "I confirm this medicine is unopened and safe.",
+                                    style: TextStyle(
+                                        color: Colors.black, fontSize: 13),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+
+                          if (_selectedType == DonationType.equipment) ...[
+                            _buildTextField(
+                              controller: _conditionController,
+                              label: "Condition (Good / Needs Repair)",
+                              icon: Icons.build,
+                            ),
+                          ],
+
+                          const SizedBox(height: 16),
+                          _buildTextField(
+                            controller: _donorNameController,
+                            label: "Donor Name",
+                            icon: Icons.person,
                           ),
                           const SizedBox(height: 16),
                           _buildTextField(
@@ -128,6 +236,15 @@ class _DonorFormPageState extends State<DonorForm> {
                             label: "Phone Number",
                             icon: Icons.phone,
                             keyboardType: TextInputType.phone,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return "Enter Phone Number";
+                              }
+                              if (value.length < 10) {
+                                return "Enter a valid phone number";
+                              }
+                              return null;
+                            },
                           ),
                           const SizedBox(height: 16),
                           _buildTextField(
@@ -136,6 +253,7 @@ class _DonorFormPageState extends State<DonorForm> {
                             icon: Icons.location_on,
                           ),
                           const SizedBox(height: 20),
+
                           Row(
                             children: [
                               ElevatedButton.icon(
@@ -162,7 +280,7 @@ class _DonorFormPageState extends State<DonorForm> {
                                   fit: BoxFit.cover,
                                 )
                                     : Image.asset(
-                                  "assets/dumy.jpg", // ✅ Default fallback
+                                  "assets/dumy.jpg",
                                   width: 70,
                                   height: 70,
                                   fit: BoxFit.cover,
@@ -170,7 +288,8 @@ class _DonorFormPageState extends State<DonorForm> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 20),
+
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
                               padding:
@@ -197,31 +316,6 @@ class _DonorFormPageState extends State<DonorForm> {
                   ),
                 ),
               ),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-                child: Column(
-                  children: const [
-                    Icon(Icons.volunteer_activism,
-                        size: 44, color: Colors.white),
-                    SizedBox(height: 10),
-                    Text(
-                      "“Your donation brings hope and happiness 💙”",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.white,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
@@ -234,17 +328,18 @@ class _DonorFormPageState extends State<DonorForm> {
     required String label,
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
-      style: const TextStyle(color: Colors.white),
+      style: const TextStyle(color: Colors.black),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white),
-        prefixIcon: Icon(icon, color: Colors.white),
+        labelStyle: const TextStyle(color: Colors.black),
+        prefixIcon: Icon(icon, color: Colors.blueAccent),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.15),
+        fillColor: Colors.white, // solid white block
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
           borderSide: BorderSide.none,
@@ -252,8 +347,8 @@ class _DonorFormPageState extends State<DonorForm> {
         contentPadding:
         const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
       ),
-      validator: (value) =>
-      value == null || value.isEmpty ? "Enter $label" : null,
+      validator: validator ??
+              (value) => value == null || value.isEmpty ? "Enter $label" : null,
     );
   }
 }

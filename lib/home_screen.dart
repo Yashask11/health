@@ -7,7 +7,8 @@ import 'models/donation.dart';
 import 'profile_screen.dart';
 import 'help_screen.dart';
 import 'login_screen.dart';
-import 'request_detail_screen.dart'; // 🔹 Import the detail screen
+import 'request_detail_screen.dart';
+import 'donation_detail_screen.dart'; // 🔹 Import Donation detail screen
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,7 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openReceiver() async {
     final result = await Navigator.push<Request>(
       context,
-      MaterialPageRoute(builder: (_) => const ReceiverForm()),
+      MaterialPageRoute(builder: (_) => const ReceiverPage()), // add const if available
     );
     if (result != null) {
       setState(() => requests.add(result));
@@ -98,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 leading: Icon(icon, color: iconColor),
                 title: Text(itemText(item)),
 
-                // ✅ Navigate to RequestDetailScreen
+                // ✅ Navigate based on type
                 onTap: () {
                   if (item is Request) {
                     Navigator.push(
@@ -108,8 +109,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             RequestDetailScreen(request: item),
                       ),
                     );
+                  } else if (item is Donation) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            DonationDetailScreen(donation: item),
+                      ),
+                    );
                   }
-                  // (Optional) You can add similar navigation for Donations later
                 },
               ),
             );
@@ -174,8 +182,8 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: EdgeInsets.zero,
           children: [
             const UserAccountsDrawerHeader(
-              accountName: Text("Your Name"),
-              accountEmail: Text("user@email.com"),
+              accountName: Text("Yashas K"),
+              accountEmail: Text("yashxas08@gmail.com"),
               currentAccountPicture: CircleAvatar(
                 backgroundColor: Colors.white,
                 child: Icon(Icons.person, size: 40, color: Colors.blueAccent),
@@ -191,8 +199,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => const ProfileScreen(
-                      name: "Your Name",
-                      email: "user@email.com",
+                      name: "Yashas K",
+                      email: "yashxas08@gmail.com",
                       phone: "+91 9876543210",
                     ),
                   ),
