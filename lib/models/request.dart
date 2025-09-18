@@ -14,4 +14,8 @@ class Request {
     required this.address,
     required this.available,
   });
+
+  // 🔹 Aliases for compatibility with UI
+  String get receiverContact => phone;
+  String get receiverAddress => address;
 }

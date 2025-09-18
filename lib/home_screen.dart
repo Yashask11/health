@@ -7,6 +7,7 @@ import 'models/donation.dart';
 import 'profile_screen.dart';
 import 'help_screen.dart';
 import 'login_screen.dart';
+import 'request_detail_screen.dart'; // 🔹 Import the detail screen
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -96,6 +97,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 dense: true,
                 leading: Icon(icon, color: iconColor),
                 title: Text(itemText(item)),
+
+                // ✅ Navigate to RequestDetailScreen
+                onTap: () {
+                  if (item is Request) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            RequestDetailScreen(request: item),
+                      ),
+                    );
+                  }
+                  // (Optional) You can add similar navigation for Donations later
+                },
               ),
             );
           },
@@ -117,7 +132,8 @@ class _HomeScreenState extends State<HomeScreen> {
             emptyText: "No requests yet",
             icon: Icons.inventory,
             iconColor: Colors.green,
-            itemText: (r) => "${r.itemName} (x${r.quantity}) • ${r.receiverName}",
+            itemText: (r) =>
+            "${r.itemName} (x${r.quantity}) • ${r.receiverName}",
           ),
         ),
       ),
@@ -136,7 +152,8 @@ class _HomeScreenState extends State<HomeScreen> {
             emptyText: "No donations yet",
             icon: Icons.volunteer_activism,
             iconColor: Colors.orange,
-            itemText: (d) => "${d.itemName} (x${d.quantity}) • ${d.donorName}",
+            itemText: (d) =>
+            "${d.itemName} (x${d.quantity}) • ${d.donorName}",
           ),
         ),
       ),
