@@ -11,7 +11,7 @@ class RequestDetailScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Request Details"),
-        backgroundColor: Colors.blueAccent,
+        backgroundColor: Colors.teal,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -25,26 +25,65 @@ class RequestDetailScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(request.itemName,
+                Center(
+                  child: Text(
+                    request.itemName,
                     style: const TextStyle(
-                        fontSize: 24, fontWeight: FontWeight.bold)),
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal,
+                    ),
+                  ),
+                ),
+                const Divider(height: 30, thickness: 1),
+                _buildDetailRow("📦 Quantity", "${request.quantity}"),
                 const SizedBox(height: 12),
-                Text("Quantity: ${request.quantity}",
-                    style: const TextStyle(fontSize: 18)),
-                const SizedBox(height: 8),
-                Text("Requested by: ${request.receiverName}",
-                    style: const TextStyle(fontSize: 18)),
-                const SizedBox(height: 8),
-                Text("Contact: ${request.receiverContact ?? "Not provided"}",
-                    style: const TextStyle(fontSize: 18)),
-                const SizedBox(height: 8),
-                Text("Address: ${request.receiverAddress ?? "Not provided"}",
-                    style: const TextStyle(fontSize: 18)),
+                _buildDetailRow("👤 Receiver", request.receiverName),
+                const SizedBox(height: 12),
+                _buildDetailRow("📞 Contact", request.phone),
+                const SizedBox(height: 12),
+                _buildDetailRow("🏠 Address", request.address),
+                const SizedBox(height: 12),
+                _buildDetailRow(
+                  "✅ Available",
+                  request.available > 0 ? "Yes" : "No",
+                  valueColor: request.available > 0 ? Colors.green : Colors.red,
+                ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value, {Color? valueColor}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 3,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+        Expanded(
+          flex: 4,
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: valueColor ?? Colors.black87,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

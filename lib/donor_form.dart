@@ -16,6 +16,7 @@ class _DonorFormPageState extends State<DonorForm> {
   final TextEditingController _itemNameController = TextEditingController();
   final TextEditingController _itemQuantityController = TextEditingController();
   final TextEditingController _expiryDateController = TextEditingController();
+  final TextEditingController _donorNameController = TextEditingController(); // ✅ added
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
 
@@ -54,9 +55,11 @@ class _DonorFormPageState extends State<DonorForm> {
         itemName: _itemNameController.text,
         quantity: int.tryParse(_itemQuantityController.text) ?? 0,
         expiryDate: _expiryDateController.text,
-        donorName: _addressController.text, // using address as donor name
+        donorName: _donorNameController.text, // ✅ Corrected
         phone: _phoneController.text,
-        imageFile: _imageFile, // can be null
+        address: _addressController.text, // ✅ Added
+        available: 1, // ✅ Default (1 = available, 0 = not available)
+        imageFile: _imageFile,
       );
 
       // ✅ Return donation to HomeScreen
@@ -121,6 +124,12 @@ class _DonorFormPageState extends State<DonorForm> {
                                 icon: Icons.calendar_today,
                               ),
                             ),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildTextField(
+                            controller: _donorNameController, // ✅ New field
+                            label: "Donor Name",
+                            icon: Icons.person,
                           ),
                           const SizedBox(height: 16),
                           _buildTextField(

@@ -19,10 +19,10 @@ class _ReceiverFormState extends State<ReceiverForm> {
 
   // Dummy items for receiver to select
   final List<Map<String, dynamic>> availableItems = [
-    {"name": "Rice", "available": 10},
-    {"name": "Clothes", "available": 20},
-    {"name": "Milk", "available": 15},
-    {"name": "Bread", "available": 25},
+    {"name": "Wheelchair", "available": 10},
+    {"name": "Walking stick", "available": 20},
+    {"name": "Paracetamol tablet", "available": 15},
+    {"name": "Oxygen Concentrator", "available": 25},
   ];
 
   @override
