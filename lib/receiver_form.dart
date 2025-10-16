@@ -15,6 +15,7 @@ class _ReceiverPageState extends State<ReceiverPage> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
+  final _organizationController = TextEditingController();
 
   // Search
   final _searchController = TextEditingController();
@@ -24,6 +25,9 @@ class _ReceiverPageState extends State<ReceiverPage> {
   String? selectedItem;
   int selectedQuantity = 1;
   bool showForm = false;
+
+  // Receiver type
+  String receiverType = "Individual"; // Default type
 
   // Dummy items
   final List<Map<String, dynamic>> availableItems = [
@@ -101,7 +105,7 @@ class _ReceiverPageState extends State<ReceiverPage> {
                 ),
               ),
 
-            // ✍️ Form Section
+            // ✍️ Request Form
             if (showForm)
               Expanded(
                 child: Form(
@@ -140,6 +144,47 @@ class _ReceiverPageState extends State<ReceiverPage> {
                       ),
                       const SizedBox(height: 12),
 
+                      // Receiver Type Selection
+                      const Text(
+                        "Receiver Type:",
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: RadioListTile<String>(
+                              title: const Text("Individual"),
+                              value: "Individual",
+                              groupValue: receiverType,
+                              onChanged: (val) {
+                                setState(() {
+                                  receiverType = val!;
+                                });
+                              },
+                            ),
+                          ),
+                          Expanded(
+                            child: RadioListTile<String>(
+                              title: const Text("Organization"),
+                              value: "Organization",
+                              groupValue: receiverType,
+                              onChanged: (val) {
+                                setState(() {
+                                  receiverType = val!;
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      // Organization name field (only visible if Organization is selected)
+                      if (receiverType == "Organization")
+                        _buildInputField(
+                            "Organization Name", _organizationController),
+
                       // Receiver Details
                       _buildInputField("Receiver Name", _nameController),
                       _buildInputField("Phone", _phoneController,
@@ -177,6 +222,11 @@ class _ReceiverPageState extends State<ReceiverPage> {
                                     receiverName: _nameController.text,
                                     phone: _phoneController.text,
                                     address: _addressController.text,
+                                    receiverType: receiverType,
+                                    organizationName:
+                                    receiverType == "Organization"
+                                        ? _organizationController.text
+                                        : null,
                                   );
                                   Navigator.pop(context, request);
                                 }
