@@ -12,11 +12,18 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
+  # Firebase Core
+  firebase_core: ^3.6.0
+
+  # Image picker
   image_picker: ^1.0.7
 
 
   # Add your dependencies here
   cupertino_icons: ^1.0.6
+  firebase_auth: ^5.3.0
+  cloud_firestore: ^5.4.3
 
 dev_dependencies:
   flutter_test:
