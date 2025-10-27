@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ Firestore import
 import 'receiver_form.dart';
 import 'donor_form.dart';
 import 'admin.dart';
@@ -8,7 +9,7 @@ import 'profile_screen.dart';
 import 'help_screen.dart';
 import 'login_screen.dart';
 import 'request_detail_screen.dart';
-import 'donation_detail_screen.dart'; // 🔹 Import Donation detail screen
+import 'donation_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,10 +22,35 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Request> requests = [];
   final List<Donation> donations = [];
 
+  // ✅ Reference to Firestore collection
+  final CollectionReference donationsRef =
+  FirebaseFirestore.instance.collection('donations');
+
+  @override
+  void initState() {
+    super.initState();
+    listenToDonations(); // ✅ Firestore real-time listener
+  }
+
+  // ✅ Firestore real-time listener for donations
+  void listenToDonations() {
+    donationsRef.snapshots().listen((snapshot) {
+      final List<Donation> loaded = snapshot.docs.map((doc) {
+        return Donation.fromMap(doc.data() as Map<String, dynamic>);
+      }).toList();
+
+      setState(() {
+        donations
+          ..clear()
+          ..addAll(loaded);
+      });
+    });
+  }
+
   Future<void> _openReceiver() async {
     final result = await Navigator.push<Request>(
       context,
-      MaterialPageRoute(builder: (_) => const ReceiverPage()), // add const if available
+      MaterialPageRoute(builder: (_) => const ReceiverPage()),
     );
     if (result != null) {
       setState(() => requests.add(result));
@@ -32,16 +58,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openDonor() async {
-    final result = await Navigator.push<Donation>(
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const DonorForm()),
     );
-    if (result != null) {
-      setState(() => donations.add(result));
-    }
   }
 
-  // 🔹 Reusable Big Button
   Widget _buildBigButton(String title, String assetPath, VoidCallback onTap) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -69,7 +91,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🔹 Section Widget
   Widget _buildSection<T>({
     required String title,
     required List<T> items,
@@ -98,23 +119,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 dense: true,
                 leading: Icon(icon, color: iconColor),
                 title: Text(itemText(item)),
-
-                // ✅ Navigate based on type
                 onTap: () {
-                  if (item is Request) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            RequestDetailScreen(request: item),
-                      ),
-                    );
-                  } else if (item is Donation) {
+                  if (item is Donation) {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) =>
                             DonationDetailScreen(donation: item),
+                      ),
+                    );
+                  } else if (item is Request) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            RequestDetailScreen(request: item),
                       ),
                     );
                   }
@@ -127,27 +146,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🔹 New Pages for full list
-  void _openRequestsPage() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text("My Requests")),
-          body: _buildSection<Request>(
-            title: "Requests",
-            items: requests,
-            emptyText: "No requests yet",
-            icon: Icons.inventory,
-            iconColor: Colors.green,
-            itemText: (r) =>
-            "${r.itemName} (x${r.quantity}) • ${r.receiverName}",
-          ),
-        ),
-      ),
-    );
-  }
-
   void _openDonationsPage() {
     Navigator.push(
       context,
@@ -155,7 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => Scaffold(
           appBar: AppBar(title: const Text("My Donations")),
           body: _buildSection<Donation>(
-            title: "Donations",
+            title: "My Donations",
             items: donations,
             emptyText: "No donations yet",
             icon: Icons.volunteer_activism,
@@ -168,15 +166,33 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _openRequestsPage() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text("My Requests")),
+          body: _buildSection<Request>(
+            title: "My Requests",
+            items: requests,
+            emptyText: "No requests yet",
+            icon: Icons.inventory,
+            iconColor: Colors.green,
+            itemText: (r) =>
+            "${r.itemName} (x${r.quantity}) • ${r.receiverName}",
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Home"),
-        backgroundColor: Colors.blueAccent,
+        backgroundColor: Colors.lightBlueAccent,
       ),
-
-      // ✅ Drawer
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
@@ -237,8 +253,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text("Sign Out",
-                  style: TextStyle(color: Colors.red)),
+              title:
+              const Text("Sign Out", style: TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushReplacement(
@@ -250,40 +266,33 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            _buildBigButton("Donor", "assets/donor.png", _openDonor),
-            _buildBigButton("Receiver", "assets/receiver.png", _openReceiver),
-            _buildBigButton("Admin", "assets/admin.png", () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AdminPage()),
-              );
-            }),
-            const SizedBox(height: 20),
-            _buildSection<Request>(
-              title: "My Requests",
-              items: requests,
-              emptyText: "No requests yet",
-              icon: Icons.inventory,
-              iconColor: Colors.green,
-              itemText: (r) =>
-              "${r.itemName} (x${r.quantity}) • ${r.receiverName}",
-            ),
-            const SizedBox(height: 20),
-            _buildSection<Donation>(
-              title: "My Donations",
-              items: donations,
-              emptyText: "No donations yet",
-              icon: Icons.volunteer_activism,
-              iconColor: Colors.orange,
-              itemText: (d) =>
-              "${d.itemName} (x${d.quantity}) • ${d.donorName}",
-            ),
-          ],
+      body: RefreshIndicator(
+        onRefresh: () async {}, // Firestore handles real-time updates
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              _buildBigButton("Donor", "assets/donor.png", _openDonor),
+              _buildBigButton("Receiver", "assets/receiver.png", _openReceiver),
+              _buildBigButton("Admin", "assets/admin.png", () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AdminPage()),
+                );
+              }),
+              const SizedBox(height: 20),
+              _buildSection<Donation>(
+                title: "My Donations",
+                items: donations,
+                emptyText: "No donations yet",
+                icon: Icons.volunteer_activism,
+                iconColor: Colors.orange,
+                itemText: (d) =>
+                "${d.itemName} (x${d.quantity}) • ${d.donorName}",
+              ),
+            ],
+          ),
         ),
       ),
     );

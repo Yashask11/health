@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:uuid/uuid.dart';
 import 'models/donation.dart';
 
 class DonorForm extends StatefulWidget {
@@ -13,309 +16,316 @@ class DonorForm extends StatefulWidget {
 class _DonorFormPageState extends State<DonorForm> {
   final _formKey = GlobalKey<FormState>();
 
-  final TextEditingController _itemNameController = TextEditingController();
-  final TextEditingController _itemQuantityController = TextEditingController();
-  final TextEditingController _expiryDateController = TextEditingController();
   final TextEditingController _donorNameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _itemNameController = TextEditingController();
+  final TextEditingController _quantityController = TextEditingController();
   final TextEditingController _conditionController = TextEditingController();
 
-  File? _imageFile;
-  bool _isAgreed = false;
-  DonationType _selectedType = DonationType.medicine; // default medicine
+  String _donationType = 'Medicine';
+  DateTime? _selectedDate;
+  File? _selectedImage;
+  bool _isSubmitting = false;
+
+  final ImagePicker _picker = ImagePicker();
 
   Future<void> _pickImage() async {
-    final pickedFile =
-    await ImagePicker().pickImage(source: ImageSource.gallery);
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
-      setState(() {
-        _imageFile = File(pickedFile.path);
-      });
+      setState(() => _selectedImage = File(pickedFile.path));
     }
   }
 
   Future<void> _pickExpiryDate() async {
     DateTime now = DateTime.now();
-    DateTime? pickedDate = await showDatePicker(
+    final picked = await showDatePicker(
       context: context,
-      initialDate: now.add(const Duration(days: 180)),
-      firstDate: now.add(const Duration(days: 180)),
-      lastDate: DateTime(2100),
+      initialDate: now,
+      firstDate: now,
+      lastDate: DateTime(now.year + 5),
     );
-
-    if (pickedDate != null) {
-      setState(() {
-        _expiryDateController.text =
-        "${pickedDate.day}/${pickedDate.month}/${pickedDate.year}";
-      });
+    if (picked != null) {
+      setState(() => _selectedDate = picked);
     }
   }
 
-  void _submitForm() {
-    if (_formKey.currentState!.validate()) {
-      if (_selectedType == DonationType.medicine && !_isAgreed) {
+  Future<String?> _uploadImage(File imageFile) async {
+    try {
+      String fileId = const Uuid().v4();
+      final storageRef =
+      FirebaseStorage.instance.ref().child('donation_images/$fileId.jpg');
+
+      await storageRef.putFile(imageFile);
+      return await storageRef.getDownloadURL();
+    } catch (e) {
+      debugPrint("Image upload error: $e");
+      return null;
+    }
+  }
+
+  Future<void> _submitForm() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    // ⚠️ Extra validation for Medicine expiry date
+    if (_donationType == 'Medicine') {
+      if (_selectedDate == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content:
-            Text("⚠️ Please confirm medicine safety before submitting."),
-            backgroundColor: Colors.redAccent,
+            content: Text("⚠️ Please select an expiry date."),
+            backgroundColor: Colors.orangeAccent,
           ),
         );
         return;
       }
 
-      final donation = Donation(
-        type: _selectedType,
-        itemName: _itemNameController.text,
-        quantity: int.tryParse(_itemQuantityController.text) ?? 0,
-        donorName: _donorNameController.text,
-        phone: _phoneController.text,
-        address: _addressController.text,
-        available: 1,
-        imageFile: _imageFile,
-        expiryDate: _selectedType == DonationType.medicine
-            ? DateTime.tryParse(_expiryDateController.text)
+      final sixMonthsLater =
+      DateTime.now().add(const Duration(days: 180)); // 6 months ahead
+
+      if (_selectedDate!.isBefore(sixMonthsLater)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "⚠️ Please select a date at least 6 months ahead before submitting.",
+            ),
+            backgroundColor: Colors.orangeAccent,
+          ),
+        );
+        return;
+      }
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      String? imageUrl;
+      if (_selectedImage != null) {
+        imageUrl = await _uploadImage(_selectedImage!);
+      }
+
+      await FirebaseFirestore.instance.collection('donations').add({
+        'donorName': _donorNameController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'address': _addressController.text.trim(),
+        'itemName': _itemNameController.text.trim(),
+        'quantity': int.tryParse(_quantityController.text) ?? 0,
+        'condition':
+        _donationType == 'Equipment' ? _conditionController.text : '',
+        'type': _donationType,
+        'expiryDate': _donationType == 'Medicine'
+            ? _selectedDate?.toIso8601String()
             : null,
-        isConfirmed: _selectedType == DonationType.medicine ? _isAgreed : null,
-        condition:
-        _selectedType == DonationType.equipment ? _conditionController.text : null,
+        'imageUrl': imageUrl ?? '',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("✅ Donation submitted successfully!"),
+          backgroundColor: Colors.lightBlue,
+        ),
       );
 
-      Navigator.pop(context, donation);
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error saving donation: $e"),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      setState(() => _isSubmitting = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    const skyBlue = Color(0xFF87CEEB);
+
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Donor Form"),
-        backgroundColor: Colors.blueAccent,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pop(context);
-          },
+        title: const Text(
+          "Donation Form",
+          style: TextStyle(color: Colors.black),
         ),
+        backgroundColor: skyBlue,
+        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 4,
       ),
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          color: Color(0xFFBBDEFB), // very light blue background
-        ),
-        child: SafeArea(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Form(
+          key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          DropdownButtonFormField<DonationType>(
-                            value: _selectedType,
-                            decoration: InputDecoration(
-                              labelText: "Donation Type",
-                              labelStyle: const TextStyle(color: Colors.black),
-                              prefixIcon:
-                              const Icon(Icons.category, color: Colors.black),
-                              filled: true,
-                              fillColor: Colors.white, // white block
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(18),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                            dropdownColor: Colors.white,
-                            items: const [
-                              DropdownMenuItem(
-                                value: DonationType.medicine,
-                                child: Text("Medicine"),
-                              ),
-                              DropdownMenuItem(
-                                value: DonationType.equipment,
-                                child: Text("Equipment"),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                _selectedType = value!;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 16),
+              const Text(
+                "🧑‍🤝‍🧑 Donor Information",
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87),
+              ),
+              const SizedBox(height: 10),
 
-                          _buildTextField(
-                            controller: _itemNameController,
-                            label: "Item Name",
-                            icon: Icons.shopping_bag,
-                          ),
-                          const SizedBox(height: 16),
-                          _buildTextField(
-                            controller: _itemQuantityController,
-                            label: "Item Quantity",
-                            icon: Icons.format_list_numbered,
-                            keyboardType: TextInputType.number,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return "Enter Item Quantity";
-                              }
-                              if (int.tryParse(value) == null ||
-                                  int.parse(value) <= 0) {
-                                return "Quantity must be greater than 0";
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
+              _buildTextField(_donorNameController, "Full Name", Icons.person, skyBlue),
+              _buildTextField(_phoneController, "Phone Number", Icons.phone, skyBlue,
+                  keyboardType: TextInputType.phone),
+              _buildTextField(_addressController, "Address", Icons.location_on, skyBlue),
+              const SizedBox(height: 20),
 
-                          if (_selectedType == DonationType.medicine) ...[
-                            GestureDetector(
-                              onTap: _pickExpiryDate,
-                              child: AbsorbPointer(
-                                child: _buildTextField(
-                                  controller: _expiryDateController,
-                                  label: "Expiry Date",
-                                  icon: Icons.calendar_today,
-                                ),
-                              ),
-                            ),
-                            const Padding(
-                              padding: EdgeInsets.only(top: 4),
-                              child: Text(
-                                "⚠️ Please select a date at least 6 months ahead.",
-                                style: TextStyle(
-                                    color: Colors.black54, fontSize: 12),
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                Checkbox(
-                                  value: _isAgreed,
-                                  activeColor: Colors.blueAccent,
-                                  checkColor: Colors.white,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _isAgreed = value ?? false;
-                                    });
-                                  },
-                                ),
-                                const Expanded(
-                                  child: Text(
-                                    "I confirm this medicine is unopened and safe.",
-                                    style: TextStyle(
-                                        color: Colors.black, fontSize: 13),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+              const Text(
+                "🎁 Donation Type",
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87),
+              ),
+              const SizedBox(height: 8),
 
-                          if (_selectedType == DonationType.equipment) ...[
-                            _buildTextField(
-                              controller: _conditionController,
-                              label: "Condition (Good / Needs Repair)",
-                              icon: Icons.build,
-                            ),
-                          ],
+              Row(
+                children: [
+                  Expanded(
+                    child: RadioListTile(
+                      title: const Text("Medicine"),
+                      value: "Medicine",
+                      activeColor: skyBlue,
+                      groupValue: _donationType,
+                      onChanged: (value) {
+                        setState(() => _donationType = value!);
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: RadioListTile(
+                      title: const Text("Equipment"),
+                      value: "Equipment",
+                      activeColor: skyBlue,
+                      groupValue: _donationType,
+                      onChanged: (value) {
+                        setState(() => _donationType = value!);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              _buildTextField(
+                  _itemNameController,
+                  _donationType == 'Medicine'
+                      ? "Medicine Name"
+                      : "Equipment Name",
+                  Icons.medical_services,
+                  skyBlue),
+              _buildTextField(_quantityController, "Quantity", Icons.numbers, skyBlue,
+                  keyboardType: TextInputType.number),
 
-                          const SizedBox(height: 16),
-                          _buildTextField(
-                            controller: _donorNameController,
-                            label: "Donor Name",
-                            icon: Icons.person,
-                          ),
-                          const SizedBox(height: 16),
-                          _buildTextField(
-                            controller: _phoneController,
-                            label: "Phone Number",
-                            icon: Icons.phone,
-                            keyboardType: TextInputType.phone,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return "Enter Phone Number";
-                              }
-                              if (value.length < 10) {
-                                return "Enter a valid phone number";
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          _buildTextField(
-                            controller: _addressController,
-                            label: "Address",
-                            icon: Icons.location_on,
-                          ),
-                          const SizedBox(height: 20),
-
-                          Row(
-                            children: [
-                              ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: Colors.blueAccent,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  elevation: 4,
-                                ),
-                                onPressed: _pickImage,
-                                icon: const Icon(Icons.image),
-                                label: const Text("Pick Image"),
-                              ),
-                              const SizedBox(width: 12),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: _imageFile != null
-                                    ? Image.file(
-                                  _imageFile!,
-                                  width: 70,
-                                  height: 70,
-                                  fit: BoxFit.cover,
-                                )
-                                    : Image.asset(
-                                  "assets/dumy.jpg",
-                                  width: 70,
-                                  height: 70,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              padding:
-                              const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              backgroundColor: Colors.white,
-                              foregroundColor: Colors.blueAccent,
-                              elevation: 6,
-                            ),
-                            onPressed: _submitForm,
-                            child: const Text(
-                              "Submit",
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
+              if (_donationType == 'Medicine') ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _selectedDate == null
+                            ? "No Expiry Date Selected"
+                            : "Expiry Date: ${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}",
+                        style: const TextStyle(color: Colors.black87),
                       ),
                     ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: skyBlue,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: _pickExpiryDate,
+                      child: const Text("Pick Date"),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "⚠️ Please select a date at least 6 months ahead before submitting.\n⚠️ Please confirm medicine safety before submitting.",
+                  style: TextStyle(
+                      color: Colors.redAccent,
+                      fontStyle: FontStyle.italic,
+                      fontWeight: FontWeight.w500),
+                ),
+              ],
+
+              if (_donationType == 'Equipment')
+                _buildTextField(
+                    _conditionController, "Condition", Icons.build_circle, skyBlue),
+
+              const SizedBox(height: 25),
+
+              Center(
+                child: Column(
+                  children: [
+                    _selectedImage != null
+                        ? ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.file(
+                        _selectedImage!,
+                        height: 150,
+                        width: 150,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                        : Container(
+                      height: 150,
+                      width: 150,
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: skyBlue),
+                      ),
+                      child: const Icon(Icons.image,
+                          size: 70, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: skyBlue,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: skyBlue)),
+                      ),
+                      onPressed: _pickImage,
+                      icon: const Icon(Icons.upload_file),
+                      label: const Text("Upload Image"),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 30),
+
+              // ✅ Submit button always visible
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: skyBlue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: _isSubmitting ? null : _submitForm,
+                  child: _isSubmitting
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                    "Submit Donation",
+                    style: TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -323,32 +333,30 @@ class _DonorFormPageState extends State<DonorForm> {
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      style: const TextStyle(color: Colors.black),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.black),
-        prefixIcon: Icon(icon, color: Colors.blueAccent),
-        filled: true,
-        fillColor: Colors.white, // solid white block
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide.none,
+  Widget _buildTextField(TextEditingController controller, String label, IconData icon, Color skyBlue,
+      {TextInputType keyboardType = TextInputType.text}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboardType,
+        validator: (v) => v!.isEmpty ? "Please enter $label" : null,
+        decoration: InputDecoration(
+          prefixIcon: Icon(icon, color: skyBlue),
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.black87),
+          filled: true,
+          fillColor: Colors.white,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: skyBlue.withOpacity(0.3)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: skyBlue, width: 1.5),
+          ),
         ),
-        contentPadding:
-        const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
       ),
-      validator: validator ??
-              (value) => value == null || value.isEmpty ? "Enter $label" : null,
     );
   }
 }

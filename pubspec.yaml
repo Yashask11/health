@@ -13,17 +13,18 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # Firebase Core
-  firebase_core: ^3.6.0
-
-  # Image picker
   image_picker: ^1.0.7
-
-
-  # Add your dependencies here
   cupertino_icons: ^1.0.6
-  firebase_auth: ^5.3.0
-  cloud_firestore: ^5.4.3
+
+  # ✅ Firebase packages (compatible set)
+  firebase_core: ^3.15.2
+  firebase_auth: ^5.7.0
+  cloud_firestore: ^5.4.4
+  firebase_storage: ^12.3.2
+
+  # For generating unique IDs
+  uuid: ^4.4.0
+  firebase_database: ^11.0.0
 
 dev_dependencies:
   flutter_test:
