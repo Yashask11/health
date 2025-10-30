@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ Firestore import
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // ✅ for current user
 import 'receiver_form.dart';
 import 'donor_form.dart';
 import 'admin.dart';
@@ -21,20 +22,25 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final List<Request> requests = [];
   final List<Donation> donations = [];
+  final user = FirebaseAuth.instance.currentUser; // ✅ current user
 
-  // ✅ Reference to Firestore collection
   final CollectionReference donationsRef =
   FirebaseFirestore.instance.collection('donations');
 
   @override
   void initState() {
     super.initState();
-    listenToDonations(); // ✅ Firestore real-time listener
+    if (user != null) {
+      listenToUserDonations(); // ✅ only user-specific donations
+    }
   }
 
-  // ✅ Firestore real-time listener for donations
-  void listenToDonations() {
-    donationsRef.snapshots().listen((snapshot) {
+  // ✅ Firestore real-time listener for current user's donations
+  void listenToUserDonations() {
+    donationsRef
+        .where('donorEmail', isEqualTo: user!.email) // filter by logged-in user
+        .snapshots()
+        .listen((snapshot) {
       final List<Donation> loaded = snapshot.docs.map((doc) {
         return Donation.fromMap(doc.data() as Map<String, dynamic>);
       }).toList();
@@ -267,7 +273,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       body: RefreshIndicator(
-        onRefresh: () async {}, // Firestore handles real-time updates
+        onRefresh: () async {},
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           physics: const AlwaysScrollableScrollPhysics(),

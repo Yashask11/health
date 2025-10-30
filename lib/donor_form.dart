@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // ✅ Added for user info
 import 'package:uuid/uuid.dart';
 import 'models/donation.dart';
 
@@ -67,7 +68,7 @@ class _DonorFormPageState extends State<DonorForm> {
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // ⚠️ Extra validation for Medicine expiry date
+    // ⚠️ Validation for Medicine expiry date
     if (_donationType == 'Medicine') {
       if (_selectedDate == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -79,9 +80,7 @@ class _DonorFormPageState extends State<DonorForm> {
         return;
       }
 
-      final sixMonthsLater =
-      DateTime.now().add(const Duration(days: 180)); // 6 months ahead
-
+      final sixMonthsLater = DateTime.now().add(const Duration(days: 180));
       if (_selectedDate!.isBefore(sixMonthsLater)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -103,6 +102,17 @@ class _DonorFormPageState extends State<DonorForm> {
         imageUrl = await _uploadImage(_selectedImage!);
       }
 
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("⚠️ You must be logged in to donate."),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+
       await FirebaseFirestore.instance.collection('donations').add({
         'donorName': _donorNameController.text.trim(),
         'phone': _phoneController.text.trim(),
@@ -117,6 +127,8 @@ class _DonorFormPageState extends State<DonorForm> {
             : null,
         'imageUrl': imageUrl ?? '',
         'timestamp': FieldValue.serverTimestamp(),
+        'donorEmail': currentUser.email, // ✅ store email
+        'donorUid': currentUser.uid, // ✅ store UID
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -170,10 +182,13 @@ class _DonorFormPageState extends State<DonorForm> {
               ),
               const SizedBox(height: 10),
 
-              _buildTextField(_donorNameController, "Full Name", Icons.person, skyBlue),
-              _buildTextField(_phoneController, "Phone Number", Icons.phone, skyBlue,
+              _buildTextField(
+                  _donorNameController, "Full Name", Icons.person, skyBlue),
+              _buildTextField(_phoneController, "Phone Number", Icons.phone,
+                  skyBlue,
                   keyboardType: TextInputType.phone),
-              _buildTextField(_addressController, "Address", Icons.location_on, skyBlue),
+              _buildTextField(
+                  _addressController, "Address", Icons.location_on, skyBlue),
               const SizedBox(height: 20),
 
               const Text(
@@ -218,7 +233,8 @@ class _DonorFormPageState extends State<DonorForm> {
                       : "Equipment Name",
                   Icons.medical_services,
                   skyBlue),
-              _buildTextField(_quantityController, "Quantity", Icons.numbers, skyBlue,
+              _buildTextField(_quantityController, "Quantity", Icons.numbers,
+                  skyBlue,
                   keyboardType: TextInputType.number),
 
               if (_donationType == 'Medicine') ...[
@@ -256,8 +272,8 @@ class _DonorFormPageState extends State<DonorForm> {
               ],
 
               if (_donationType == 'Equipment')
-                _buildTextField(
-                    _conditionController, "Condition", Icons.build_circle, skyBlue),
+                _buildTextField(_conditionController, "Condition",
+                    Icons.build_circle, skyBlue),
 
               const SizedBox(height: 25),
 
@@ -333,7 +349,8 @@ class _DonorFormPageState extends State<DonorForm> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, IconData icon, Color skyBlue,
+  Widget _buildTextField(TextEditingController controller, String label,
+      IconData icon, Color skyBlue,
       {TextInputType keyboardType = TextInputType.text}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
