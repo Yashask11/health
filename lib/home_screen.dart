@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // ✅ for current user
+import 'package:firebase_auth/firebase_auth.dart';
 import 'receiver_form.dart';
 import 'donor_form.dart';
 import 'admin.dart';
@@ -22,23 +22,57 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final List<Request> requests = [];
   final List<Donation> donations = [];
-  final user = FirebaseAuth.instance.currentUser; // ✅ current user
+  final user = FirebaseAuth.instance.currentUser;
 
   final CollectionReference donationsRef =
   FirebaseFirestore.instance.collection('donations');
+
+  String userName = "Loading...";
+  String userEmail = "";
+  String userPhone = "";
 
   @override
   void initState() {
     super.initState();
     if (user != null) {
-      listenToUserDonations(); // ✅ only user-specific donations
+      userEmail = user!.email ?? '';
+      _loadUserDetails();
+      listenToUserDonations();
     }
   }
 
-  // ✅ Firestore real-time listener for current user's donations
+  // ✅ Fetch current user details from Firestore (users collection)
+  Future<void> _loadUserDetails() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user!.uid)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data()!;
+        setState(() {
+          userName = data['name'] ?? 'User';
+          userPhone = data['phone'] ?? 'N/A';
+        });
+      } else {
+        setState(() {
+          userName = "User";
+          userPhone = "N/A";
+        });
+      }
+    } catch (e) {
+      setState(() {
+        userName = "User";
+        userPhone = "N/A";
+      });
+    }
+  }
+
+  // ✅ Listen to user’s own donations
   void listenToUserDonations() {
     donationsRef
-        .where('donorEmail', isEqualTo: user!.email) // filter by logged-in user
+        .where('donorEmail', isEqualTo: user!.email)
         .snapshots()
         .listen((snapshot) {
       final List<Donation> loaded = snapshot.docs.map((doc) {
@@ -164,8 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
             emptyText: "No donations yet",
             icon: Icons.volunteer_activism,
             iconColor: Colors.orange,
-            itemText: (d) =>
-            "${d.itemName} (x${d.quantity}) • ${d.donorName}",
+            itemText: (d) => "${d.itemName} (x${d.quantity}) • ${d.donorName}",
           ),
         ),
       ),
@@ -203,14 +236,14 @@ class _HomeScreenState extends State<HomeScreen> {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            const UserAccountsDrawerHeader(
-              accountName: Text("Yashas K"),
-              accountEmail: Text("yashxas08@gmail.com"),
-              currentAccountPicture: CircleAvatar(
+            UserAccountsDrawerHeader(
+              accountName: Text(userName),
+              accountEmail: Text(userEmail),
+              currentAccountPicture: const CircleAvatar(
                 backgroundColor: Colors.white,
                 child: Icon(Icons.person, size: 40, color: Colors.blueAccent),
               ),
-              decoration: BoxDecoration(color: Colors.blueAccent),
+              decoration: const BoxDecoration(color: Colors.blueAccent),
             ),
             ListTile(
               leading: const Icon(Icons.person),
@@ -220,10 +253,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const ProfileScreen(
-                      name: "Yashas K",
-                      email: "yashxas08@gmail.com",
-                      phone: "+91 9876543210",
+                    builder: (_) => ProfileScreen(
+                      name: userName,
+                      email: userEmail,
+                      phone: userPhone,
                     ),
                   ),
                 );
