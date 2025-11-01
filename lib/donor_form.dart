@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // ✅ Added for user info
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
-import 'models/donation.dart';
 
 class DonorForm extends StatefulWidget {
   const DonorForm({super.key});
@@ -30,6 +29,31 @@ class _DonorFormPageState extends State<DonorForm> {
   bool _isSubmitting = false;
 
   final ImagePicker _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData(); // ✅ Load user info automatically
+  }
+
+  Future<void> _loadUserData() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null) {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+
+      if (userDoc.exists) {
+        final data = userDoc.data()!;
+        setState(() {
+          _donorNameController.text = data['name'] ?? '';
+          _phoneController.text = data['phone'] ?? '';
+          _addressController.text = data['address'] ?? '';
+        });
+      }
+    }
+  }
 
   Future<void> _pickImage() async {
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
@@ -68,7 +92,6 @@ class _DonorFormPageState extends State<DonorForm> {
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // ⚠️ Validation for Medicine expiry date
     if (_donationType == 'Medicine') {
       if (_selectedDate == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -127,8 +150,8 @@ class _DonorFormPageState extends State<DonorForm> {
             : null,
         'imageUrl': imageUrl ?? '',
         'timestamp': FieldValue.serverTimestamp(),
-        'donorEmail': currentUser.email, // ✅ store email
-        'donorUid': currentUser.uid, // ✅ store UID
+        'donorEmail': currentUser.email,
+        'donorUid': currentUser.uid,
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -189,6 +212,8 @@ class _DonorFormPageState extends State<DonorForm> {
                   keyboardType: TextInputType.phone),
               _buildTextField(
                   _addressController, "Address", Icons.location_on, skyBlue),
+
+              // Rest of your existing fields are unchanged...
               const SizedBox(height: 20),
 
               const Text(
@@ -226,6 +251,7 @@ class _DonorFormPageState extends State<DonorForm> {
                   ),
                 ],
               ),
+
               _buildTextField(
                   _itemNameController,
                   _donationType == 'Medicine'
@@ -320,7 +346,6 @@ class _DonorFormPageState extends State<DonorForm> {
 
               const SizedBox(height: 30),
 
-              // ✅ Submit button always visible
               SizedBox(
                 width: double.infinity,
                 height: 50,
