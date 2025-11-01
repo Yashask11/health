@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -39,7 +38,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (user != null) {
       userEmail = user!.email ?? '';
       _loadUserDetails();
-      listenToUserDonations();
     }
   }
 
@@ -56,27 +54,38 @@ class _HomeScreenState extends State<HomeScreen> {
           userName = data['name'] ?? 'User';
           userPhone = data['phone'] ?? 'N/A';
         });
+
+        // ✅ Load donations only after we have user details
+        listenToUserDonations(data['name'], data['phone']);
       } else {
         setState(() {
           userName = "User";
           userPhone = "N/A";
         });
+        listenToUserDonations("User", "N/A");
       }
     } catch (e) {
       setState(() {
         userName = "User";
         userPhone = "N/A";
       });
+      listenToUserDonations("User", "N/A");
     }
   }
 
-  void listenToUserDonations() {
+  void listenToUserDonations(String donorName, String donorPhone) {
     donationsRef
         .where('donorEmail', isEqualTo: user!.email)
         .snapshots()
         .listen((snapshot) {
       final List<Donation> loaded = snapshot.docs.map((doc) {
-        return Donation.fromMap(doc.data() as Map<String, dynamic>);
+        final data = doc.data() as Map<String, dynamic>;
+
+        // ✅ Add missing donor info if not stored in donation
+        data['donorName'] ??= donorName;
+        data['donorPhone'] ??= donorPhone;
+
+        return Donation.fromMap(data);
       }).toList();
 
       setState(() {
@@ -104,21 +113,31 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ✅ Helper function to decode Base64 and show image
-  Widget _buildImage(String? base64String) {
-    if (base64String == null || base64String.isEmpty) {
+  Widget _buildImage(String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty) {
       return const Icon(Icons.image_not_supported,
           size: 60, color: Colors.grey);
     }
-    try {
-      Uint8List bytes = base64Decode(base64String);
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: Image.memory(bytes, fit: BoxFit.cover, height: 60, width: 60),
-      );
-    } catch (e) {
-      return const Icon(Icons.broken_image, size: 60, color: Colors.grey);
-    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Image.network(
+        imageUrl,
+        fit: BoxFit.cover,
+        height: 60,
+        width: 60,
+        errorBuilder: (context, error, stackTrace) {
+          return const Icon(Icons.broken_image, size: 60, color: Colors.grey);
+        },
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return const SizedBox(
+            height: 60,
+            width: 60,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          );
+        },
+      ),
+    );
   }
 
   Widget _buildBigButton(String title, String assetPath, VoidCallback onTap) {
@@ -175,7 +194,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: ListTile(
                 dense: true,
                 leading: item is Donation
-                    ? _buildImage(item.imageBase64) // ✅ show Base64 image
+                    ? _buildImage(item.imageUrl)
                     : Icon(icon, color: iconColor),
                 title: Text(itemText(item)),
                 onTap: () {
@@ -218,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icons.volunteer_activism,
             iconColor: Colors.orange,
             itemText: (d) =>
-            "${d.itemName} (x${d.quantity}) • ${d.donorName}",
+            "${d.itemName} (x${d.quantity}) • ${d.donorName} • ${d.donorPhone}",
           ),
         ),
       ),
@@ -348,7 +367,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icons.volunteer_activism,
                 iconColor: Colors.orange,
                 itemText: (d) =>
-                "${d.itemName} (x${d.quantity}) • ${d.donorName}",
+                "${d.itemName} (x${d.quantity}) • ${d.donorName} • ${d.donorPhone}",
               ),
             ],
           ),

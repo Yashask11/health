@@ -8,12 +8,12 @@ class Donation {
   final String itemName;
   final int quantity;
   final String donorName;
-  final String phone;
+  final String donorPhone; // ✅ Renamed for consistency
   final String address;
   final int available;
 
-  final File? imageFile; // local file
-  final String? imageBase64; // ✅ base64 string stored in Firebase
+  final File? imageFile; // Local file used during upload
+  final String? imageUrl; // ✅ Firebase Storage URL
 
   final DateTime? expiryDate;
   final bool? isConfirmed;
@@ -24,11 +24,11 @@ class Donation {
     required this.itemName,
     required this.quantity,
     required this.donorName,
-    required this.phone,
+    required this.donorPhone,
     required this.address,
     required this.available,
     this.imageFile,
-    this.imageBase64,
+    this.imageUrl,
     this.expiryDate,
     this.isConfirmed,
     this.condition,
@@ -41,10 +41,10 @@ class Donation {
       'itemName': itemName,
       'quantity': quantity,
       'donorName': donorName,
-      'phone': phone,
+      'donorPhone': donorPhone, // ✅ Consistent field name
       'address': address,
       'available': available,
-      'imageBase64': imageBase64, // ✅ store base64 string
+      'imageUrl': imageUrl,
       'expiryDate': expiryDate?.toIso8601String(),
       'isConfirmed': isConfirmed,
       'condition': condition,
@@ -60,10 +60,10 @@ class Donation {
       itemName: map['itemName'] ?? '',
       quantity: int.tryParse(map['quantity'].toString()) ?? 0,
       donorName: map['donorName'] ?? '',
-      phone: map['phone'] ?? '',
+      donorPhone: map['donorPhone'] ?? map['phone'] ?? '', // ✅ fallback support
       address: map['address'] ?? '',
       available: int.tryParse(map['available'].toString()) ?? 1,
-      imageBase64: map['imageBase64'], // ✅ now defined
+      imageUrl: map['imageUrl'],
       expiryDate: map['expiryDate'] != null
           ? DateTime.tryParse(map['expiryDate'])
           : null,

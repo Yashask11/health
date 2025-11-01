@@ -1,5 +1,3 @@
-import 'dart:convert'; // ✅ For base64Decode
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'models/donation.dart'; // ✅ Import your Donation model
 
@@ -63,7 +61,7 @@ class DonationDetailScreen extends StatelessWidget {
             // ---------- Donor Information ----------
             _buildDetailRow(Icons.person, "Donor Name", donation.donorName),
             const SizedBox(height: 12),
-            _buildDetailRow(Icons.phone, "Phone", donation.phone),
+            _buildDetailRow(Icons.phone, "Phone", donation.donorPhone), // ✅ updated field
             const SizedBox(height: 12),
             _buildDetailRow(Icons.location_on, "Address", donation.address),
             const SizedBox(height: 12),
@@ -78,41 +76,37 @@ class DonationDetailScreen extends StatelessWidget {
             const SizedBox(height: 20),
 
             // ---------- Image Section ----------
-            if (donation.imageFile != null)
+            if (donation.imageUrl != null && donation.imageUrl!.isNotEmpty)
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.file(
-                  donation.imageFile!,
+                child: Image.network(
+                  donation.imageUrl!,
                   height: 220,
                   width: double.infinity,
                   fit: BoxFit.cover,
-                ),
-              )
-            else if (donation.imageBase64 != null &&
-                donation.imageBase64!.isNotEmpty)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.memory(
-                  base64Decode(donation.imageBase64!),
-                  height: 220,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return _buildNoImageContainer("Image failed to load");
+                  },
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return SizedBox(
+                      height: 220,
+                      width: double.infinity,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                              : null,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               )
             else
-              Container(
-                height: 220,
-                decoration: BoxDecoration(
-                  color: Colors.lightBlue[50],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Center(
-                  child: Text(
-                    "No Image Provided",
-                    style: TextStyle(color: Colors.black54),
-                  ),
-                ),
-              ),
+              _buildNoImageContainer("No Image Provided"),
           ],
         ),
       ),
@@ -141,6 +135,22 @@ class DonationDetailScreen extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildNoImageContainer(String message) {
+    return Container(
+      height: 220,
+      decoration: BoxDecoration(
+        color: Colors.lightBlue[50],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: Text(
+          message,
+          style: const TextStyle(color: Colors.black54),
+        ),
+      ),
     );
   }
 }

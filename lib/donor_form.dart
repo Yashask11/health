@@ -1,10 +1,10 @@
 // lib/donor_form.dart
 import 'dart:io';
-import 'dart:convert'; // ✅ for base64 encoding
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart'; // ✅ for image upload
 import 'package:uuid/uuid.dart';
 
 class DonorForm extends StatefulWidget {
@@ -69,13 +69,21 @@ class _DonorFormPageState extends State<DonorForm> {
     }
   }
 
-  /// ✅ Convert image to Base64 string
-  String? _convertImageToBase64(File? imageFile) {
+  // ✅ Upload image to Firebase Storage and return URL
+  Future<String?> _uploadImageToStorage(File? imageFile) async {
     if (imageFile == null) return null;
-    final bytes = imageFile.readAsBytesSync();
-    return base64Encode(bytes);
+    try {
+      String fileId = const Uuid().v4();
+      final ref = FirebaseStorage.instance.ref().child('donation_images/$fileId.jpg');
+      await ref.putFile(imageFile);
+      return await ref.getDownloadURL();
+    } catch (e) {
+      debugPrint("Image upload error: $e");
+      return null;
+    }
   }
 
+  // ✅ Expiry Date Picker (fixed)
   Future<void> _pickExpiryDate() async {
     DateTime now = DateTime.now();
     final picked = await showDatePicker(
@@ -84,9 +92,12 @@ class _DonorFormPageState extends State<DonorForm> {
       firstDate: now,
       lastDate: DateTime(now.year + 5),
     );
+
     if (picked != null) {
-      _expiryDateController.text =
-      "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+      setState(() {
+        _expiryDateController.text =
+        "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+      });
     }
   }
 
@@ -127,7 +138,8 @@ class _DonorFormPageState extends State<DonorForm> {
     try {
       final docRef = FirebaseFirestore.instance.collection('donations').doc();
 
-      String? imageBase64 = _convertImageToBase64(_imageFile);
+      // ✅ Upload image to Firebase Storage
+      String? imageUrl = await _uploadImageToStorage(_imageFile);
 
       await docRef.set({
         'donorUid': _userUid,
@@ -140,7 +152,7 @@ class _DonorFormPageState extends State<DonorForm> {
         'type': _donationType,
         'condition': _donationType == 'Equipment' ? _conditionController.text.trim() : null,
         'expiryDate': _donationType == 'Medicine' ? _expiryDateController.text.trim() : null,
-        'imageBase64': imageBase64 ?? '',
+        'imageUrl': imageUrl ?? '',
         'available': 1,
         'timestamp': FieldValue.serverTimestamp(),
       });
@@ -281,8 +293,12 @@ class _DonorFormPageState extends State<DonorForm> {
                     _imageFile != null
                         ? ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: Image.file(_imageFile!,
-                          height: 150, width: 150, fit: BoxFit.cover),
+                      child: Image.file(
+                        _imageFile!,
+                        height: 150,
+                        width: 150,
+                        fit: BoxFit.cover,
+                      ),
                     )
                         : Container(
                       height: 150,
@@ -292,8 +308,7 @@ class _DonorFormPageState extends State<DonorForm> {
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: skyBlue),
                       ),
-                      child: const Icon(Icons.image,
-                          size: 70, color: Colors.grey),
+                      child: const Icon(Icons.image, size: 70, color: Colors.grey),
                     ),
                     const SizedBox(height: 8),
                     ElevatedButton.icon(
