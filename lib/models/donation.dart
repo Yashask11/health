@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:firebase_database/firebase_database.dart';
 
 enum DonationType { medicine, equipment }
 
@@ -8,75 +7,74 @@ class Donation {
   final String itemName;
   final int quantity;
   final String donorName;
+  final String donorEmail;
+  final String donorUid;
   final String phone;
   final String address;
-  final int available;
-  final File? imageFile; // For local use only
-  final String? imageUrl; // ✅ For Firebase stored image
-
-  // Medicine-specific
+  final String? condition;
   final DateTime? expiryDate;
   final bool? isConfirmed;
+  final int available;
 
-  // Equipment-specific
-  final String? condition;
+  final File? imageFile; // Local image (not stored in Firestore)
+  final String? imageBase64; // ✅ Firestore stores Base64 image
 
   Donation({
     required this.type,
     required this.itemName,
     required this.quantity,
     required this.donorName,
+    required this.donorEmail,
+    required this.donorUid,
     required this.phone,
     required this.address,
-    required this.available,
-    this.imageFile,
-    this.imageUrl,
+    this.condition,
     this.expiryDate,
     this.isConfirmed,
-    this.condition,
+    required this.available,
+    this.imageFile,
+    this.imageBase64,
   });
 
-  /// ✅ Convert Donation → Map (for Firebase upload)
+  // ✅ Convert Donation → Map (for uploading to Firestore)
   Map<String, dynamic> toMap() {
     return {
-      'type': type.name, // "medicine" or "equipment"
+      'type': type.name,
       'itemName': itemName,
       'quantity': quantity,
       'donorName': donorName,
+      'donorEmail': donorEmail,
+      'donorUid': donorUid,
       'phone': phone,
       'address': address,
-      'available': available,
-      'imageUrl': imageUrl, // imageFile not uploaded, just URL
-      'expiryDate': expiryDate?.toIso8601String(),
-      'isConfirmed': isConfirmed,
       'condition': condition,
+      'expiryDate': expiryDate?.toIso8601String(),
+      'isConfirmed': isConfirmed ?? false,
+      'available': available,
+      'imageBase64': imageBase64,
     };
   }
 
-  /// ✅ Convert Map → Donation (for fetching from Firebase)
+  // ✅ Convert Firestore data → Donation
   factory Donation.fromMap(Map<String, dynamic> map) {
     return Donation(
       type: map['type'] == 'medicine'
           ? DonationType.medicine
           : DonationType.equipment,
       itemName: map['itemName'] ?? '',
-      quantity: int.tryParse(map['quantity'].toString()) ?? 0,
+      quantity: map['quantity'] ?? 0,
       donorName: map['donorName'] ?? '',
+      donorEmail: map['donorEmail'] ?? '',
+      donorUid: map['donorUid'] ?? '',
       phone: map['phone'] ?? '',
       address: map['address'] ?? '',
-      available: int.tryParse(map['available'].toString()) ?? 1,
-      imageUrl: map['imageUrl'],
+      condition: map['condition'],
       expiryDate: map['expiryDate'] != null
           ? DateTime.tryParse(map['expiryDate'])
           : null,
       isConfirmed: map['isConfirmed'] ?? false,
-      condition: map['condition'],
+      available: map['available'] ?? 1,
+      imageBase64: map['imageBase64'],
     );
-  }
-
-  /// ✅ Convert Firebase snapshot → Donation
-  factory Donation.fromSnapshot(DataSnapshot snapshot) {
-    final data = Map<String, dynamic>.from(snapshot.value as Map);
-    return Donation.fromMap(data);
   }
 }
