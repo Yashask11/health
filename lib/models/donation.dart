@@ -11,14 +11,12 @@ class Donation {
   final String phone;
   final String address;
   final int available;
-  final File? imageFile; // For local use only
-  final String? imageUrl; // ✅ For Firebase stored image
 
-  // Medicine-specific
+  final File? imageFile; // local file
+  final String? imageBase64; // ✅ base64 string stored in Firebase
+
   final DateTime? expiryDate;
   final bool? isConfirmed;
-
-  // Equipment-specific
   final String? condition;
 
   Donation({
@@ -30,13 +28,13 @@ class Donation {
     required this.address,
     required this.available,
     this.imageFile,
-    this.imageUrl,
+    this.imageBase64,
     this.expiryDate,
     this.isConfirmed,
     this.condition,
   });
 
-  /// ✅ Convert Donation → Map (for Firebase upload)
+  // ✅ Convert Donation → Map (for Firebase upload)
   Map<String, dynamic> toMap() {
     return {
       'type': type.name, // "medicine" or "equipment"
@@ -46,14 +44,14 @@ class Donation {
       'phone': phone,
       'address': address,
       'available': available,
-      'imageUrl': imageUrl, // imageFile not uploaded, just URL
+      'imageBase64': imageBase64, // ✅ store base64 string
       'expiryDate': expiryDate?.toIso8601String(),
       'isConfirmed': isConfirmed,
       'condition': condition,
     };
   }
 
-  /// ✅ Convert Map → Donation (for fetching from Firebase)
+  // ✅ Convert Map → Donation (for fetching from Firebase)
   factory Donation.fromMap(Map<String, dynamic> map) {
     return Donation(
       type: map['type'] == 'medicine'
@@ -65,7 +63,7 @@ class Donation {
       phone: map['phone'] ?? '',
       address: map['address'] ?? '',
       available: int.tryParse(map['available'].toString()) ?? 1,
-      imageUrl: map['imageUrl'],
+      imageBase64: map['imageBase64'], // ✅ now defined
       expiryDate: map['expiryDate'] != null
           ? DateTime.tryParse(map['expiryDate'])
           : null,
@@ -74,7 +72,7 @@ class Donation {
     );
   }
 
-  /// ✅ Convert Firebase snapshot → Donation
+  // ✅ Convert Firebase snapshot → Donation
   factory Donation.fromSnapshot(DataSnapshot snapshot) {
     final data = Map<String, dynamic>.from(snapshot.value as Map);
     return Donation.fromMap(data);
