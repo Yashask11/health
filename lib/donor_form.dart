@@ -88,7 +88,7 @@ class _DonorFormPageState extends State<DonorForm> {
       if (_selectedDate == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("⚠️ Please select an expiry date."),
+            content: Text("⚠ Please select an expiry date."),
             backgroundColor: Colors.orangeAccent,
           ),
         );
@@ -100,7 +100,7 @@ class _DonorFormPageState extends State<DonorForm> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              "⚠️ Please select a date at least 6 months ahead before submitting.",
+              "⚠ Please select a date at least 6 months ahead before submitting.",
             ),
             backgroundColor: Colors.orangeAccent,
           ),
@@ -118,7 +118,7 @@ class _DonorFormPageState extends State<DonorForm> {
       if (currentUser == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("⚠️ You must be logged in to donate."),
+            content: Text("⚠ You must be logged in to donate."),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -277,7 +277,7 @@ class _DonorFormPageState extends State<DonorForm> {
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  "⚠️ Please select a date at least 6 months ahead before submitting.\n⚠️ Please confirm medicine safety before submitting.",
+                  "⚠ Please select a date at least 6 months ahead before submitting.\n⚠ Please confirm medicine safety before submitting.",
                   style: TextStyle(
                       color: Colors.redAccent,
                       fontStyle: FontStyle.italic,

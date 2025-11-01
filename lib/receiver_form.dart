@@ -1,4 +1,7 @@
+// lib/receiver_form.dart  (or replace your existing receiver_page.dart content)
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'models/request.dart';
 
 class ReceiverPage extends StatefulWidget {
@@ -11,25 +14,25 @@ class ReceiverPage extends StatefulWidget {
 class _ReceiverPageState extends State<ReceiverPage> {
   final _formKey = GlobalKey<FormState>();
 
-  // Form controllers
-  final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _addressController = TextEditingController();
-  final _organizationController = TextEditingController();
+  // only address & organization are shown; name/phone/email are hidden (auto-filled)
+  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _organizationController = TextEditingController();
 
-  // Search
-  final _searchController = TextEditingController();
-  String searchQuery = "";
-
-  // State
+  // quantity/item selection state
   String? selectedItem;
   int selectedQuantity = 1;
   bool showForm = false;
+  String searchQuery = "";
 
-  // Receiver type
-  String receiverType = "Individual"; // Default type
+  // receiver type: Individual | Organization
+  String receiverType = "Individual";
 
-  // Dummy items
+  // auto-filled hidden fields
+  String _userName = "";
+  String _userEmail = "";
+  String _userPhone = "";
+  String _userUid = "";
+
   final List<Map<String, dynamic>> availableItems = [
     {"name": "Wheelchair", "available": 10},
     {"name": "Walking stick", "available": 20},
@@ -38,12 +41,79 @@ class _ReceiverPageState extends State<ReceiverPage> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    _userUid = user.uid;
+    _userEmail = user.email ?? "";
+
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        setState(() {
+          _userName = (data['name'] ?? user.displayName ?? "").toString();
+          _userPhone = (data['phone'] ?? "").toString();
+          _addressController.text = (data['address'] ?? "").toString();
+        });
+      } else {
+        setState(() {
+          _userName = user.displayName ?? "";
+          _userPhone = "";
+          _addressController.text = "";
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _userName = user.displayName ?? "";
+        _userPhone = "";
+      });
+    }
+  }
+
+  void _submitRequest() {
+    if (!_formKey.currentState!.validate()) return;
+    final request = Request(
+      itemName: selectedItem ?? "",
+      quantity: selectedQuantity,
+      available: 1,
+      receiverName: _userName,
+      phone: _userPhone,
+      address: _addressController.text.trim(),
+      receiverType: receiverType,
+      organizationName: receiverType == "Organization" ? _organizationController.text.trim() : null,
+    );
+
+    // optionally save to Firestore as well:
+    // save to 'requests' collection with user info
+    FirebaseFirestore.instance.collection('requests').add({
+      'itemName': request.itemName,
+      'quantity': request.quantity,
+      'available': request.available,
+      'receiverName': request.receiverName,
+      'phone': request.phone,
+      'address': request.address,
+      'receiverType': request.receiverType,
+      'organizationName': request.organizationName ?? '',
+      'requesterUid': _userUid,
+      'requesterEmail': _userEmail,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    Navigator.pop(context, request);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Filter items by search
-    List<Map<String, dynamic>> filteredItems = availableItems
-        .where((item) =>
-        item["name"].toLowerCase().contains(searchQuery.toLowerCase()))
-        .toList();
+    final filteredItems = availableItems.where((it) {
+      final name = (it['name'] ?? "").toString().toLowerCase();
+      return name.contains(searchQuery.toLowerCase());
+    }).toList();
 
     return Scaffold(
       backgroundColor: Colors.green.shade50,
@@ -55,45 +125,33 @@ class _ReceiverPageState extends State<ReceiverPage> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // 🔍 Search Bar
             TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: "Search items...",
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
               ),
-              onChanged: (value) {
-                setState(() => searchQuery = value);
-              },
+              onChanged: (v) => setState(() => searchQuery = v),
             ),
             const SizedBox(height: 16),
 
-            // 📦 List of Items
             if (!showForm)
               Expanded(
                 child: ListView.builder(
                   itemCount: filteredItems.length,
-                  itemBuilder: (context, index) {
-                    final item = filteredItems[index];
+                  itemBuilder: (context, idx) {
+                    final it = filteredItems[idx];
                     return Card(
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       child: ListTile(
-                        title: Text(
-                          "${item["name"]} (Available: ${item["available"]})",
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
+                        title: Text("${it['name']} (Available: ${it['available']})",
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
                         trailing: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                          ),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                           onPressed: () {
                             setState(() {
                               showForm = true;
-                              selectedItem = item["name"];
+                              selectedItem = it['name'];
                               selectedQuantity = 1;
                             });
                           },
@@ -105,52 +163,34 @@ class _ReceiverPageState extends State<ReceiverPage> {
                 ),
               ),
 
-            // ✍️ Request Form
             if (showForm)
               Expanded(
                 child: Form(
                   key: _formKey,
                   child: ListView(
                     children: [
-                      Text("Requesting: $selectedItem",
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 18)),
-                      const SizedBox(height: 16),
+                      Text("Requesting: $selectedItem", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
 
-                      // Quantity
                       Row(
                         children: [
-                          const Text("Quantity:",
-                              style: TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.bold)),
+                          const Text("Quantity:", style: TextStyle(fontWeight: FontWeight.bold)),
                           IconButton(
                             icon: const Icon(Icons.remove, color: Colors.red),
                             onPressed: () {
-                              if (selectedQuantity > 1) {
-                                setState(() => selectedQuantity--);
-                              }
+                              if (selectedQuantity > 1) setState(() => selectedQuantity--);
                             },
                           ),
-                          Text("$selectedQuantity",
-                              style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.bold)),
+                          Text("$selectedQuantity", style: const TextStyle(fontWeight: FontWeight.bold)),
                           IconButton(
                             icon: const Icon(Icons.add, color: Colors.green),
-                            onPressed: () {
-                              setState(() => selectedQuantity++);
-                            },
+                            onPressed: () => setState(() => selectedQuantity++),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
 
-                      // Receiver Type Selection
-                      const Text(
-                        "Receiver Type:",
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
-                      const SizedBox(height: 8),
+                      const Text("Receiver Type:", style: TextStyle(fontWeight: FontWeight.bold)),
                       Row(
                         children: [
                           Expanded(
@@ -158,11 +198,7 @@ class _ReceiverPageState extends State<ReceiverPage> {
                               title: const Text("Individual"),
                               value: "Individual",
                               groupValue: receiverType,
-                              onChanged: (val) {
-                                setState(() {
-                                  receiverType = val!;
-                                });
-                              },
+                              onChanged: (v) => setState(() => receiverType = v!),
                             ),
                           ),
                           Expanded(
@@ -170,67 +206,47 @@ class _ReceiverPageState extends State<ReceiverPage> {
                               title: const Text("Organization"),
                               value: "Organization",
                               groupValue: receiverType,
-                              onChanged: (val) {
-                                setState(() {
-                                  receiverType = val!;
-                                });
-                              },
+                              onChanged: (v) => setState(() => receiverType = v!),
                             ),
                           ),
                         ],
                       ),
 
-                      // Organization name field (only visible if Organization is selected)
                       if (receiverType == "Organization")
-                        _buildInputField(
-                            "Organization Name", _organizationController),
+                        TextFormField(
+                          controller: _organizationController,
+                          decoration: const InputDecoration(labelText: "Organization Name"),
+                          validator: (v) {
+                            if (receiverType == "Organization" && (v == null || v.isEmpty)) return "Enter organization name";
+                            return null;
+                          },
+                        ),
 
-                      // Receiver Details
-                      _buildInputField("Receiver Name", _nameController),
-                      _buildInputField("Phone", _phoneController,
-                          keyboardType: TextInputType.phone),
-                      _buildInputField("Address", _addressController),
+                      const SizedBox(height: 12),
 
-                      const SizedBox(height: 20),
+                      // Name/Phone/Email are hidden (auto-filled) — we only show and allow editing of address
+                      TextFormField(
+                        controller: _addressController,
+                        decoration: const InputDecoration(labelText: "Address (editable)"),
+                        validator: (v) => v == null || v.isEmpty ? "Enter address" : null,
+                      ),
 
-                      // Buttons
+                      const SizedBox(height: 18),
+
                       Row(
                         children: [
                           Expanded(
                             child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.grey,
-                              ),
-                              onPressed: () {
-                                setState(() => showForm = false);
-                              },
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
+                              onPressed: () => setState(() => showForm = false),
                               child: const Text("Back"),
                             ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green.shade700,
-                              ),
-                              onPressed: () {
-                                if (_formKey.currentState!.validate()) {
-                                  final request = Request(
-                                    itemName: selectedItem!,
-                                    quantity: selectedQuantity,
-                                    available: 1,
-                                    receiverName: _nameController.text,
-                                    phone: _phoneController.text,
-                                    address: _addressController.text,
-                                    receiverType: receiverType,
-                                    organizationName:
-                                    receiverType == "Organization"
-                                        ? _organizationController.text
-                                        : null,
-                                  );
-                                  Navigator.pop(context, request);
-                                }
-                              },
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700),
+                              onPressed: _submitRequest,
                               child: const Text("Submit Request"),
                             ),
                           ),
@@ -242,27 +258,6 @@ class _ReceiverPageState extends State<ReceiverPage> {
               ),
           ],
         ),
-      ),
-    );
-  }
-
-  // 🌿 Custom input field
-  Widget _buildInputField(String label, TextEditingController controller,
-      {TextInputType keyboardType = TextInputType.text}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextFormField(
-        controller: controller,
-        keyboardType: keyboardType,
-        decoration: InputDecoration(
-          labelText: label,
-          filled: true,
-          fillColor: Colors.green.shade100,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        validator: (val) => val!.isEmpty ? "Enter $label" : null,
       ),
     );
   }
