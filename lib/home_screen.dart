@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -41,7 +43,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ✅ Fetch current user details from Firestore (users collection)
   Future<void> _loadUserDetails() async {
     try {
       final doc = await FirebaseFirestore.instance
@@ -69,7 +70,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ✅ Listen to user’s own donations
   void listenToUserDonations() {
     donationsRef
         .where('donorEmail', isEqualTo: user!.email)
@@ -102,6 +102,23 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       MaterialPageRoute(builder: (_) => const DonorForm()),
     );
+  }
+
+  // ✅ Helper function to decode Base64 and show image
+  Widget _buildImage(String? base64String) {
+    if (base64String == null || base64String.isEmpty) {
+      return const Icon(Icons.image_not_supported,
+          size: 60, color: Colors.grey);
+    }
+    try {
+      Uint8List bytes = base64Decode(base64String);
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.memory(bytes, fit: BoxFit.cover, height: 60, width: 60),
+      );
+    } catch (e) {
+      return const Icon(Icons.broken_image, size: 60, color: Colors.grey);
+    }
   }
 
   Widget _buildBigButton(String title, String assetPath, VoidCallback onTap) {
@@ -157,7 +174,9 @@ class _HomeScreenState extends State<HomeScreen> {
               margin: const EdgeInsets.symmetric(vertical: 6),
               child: ListTile(
                 dense: true,
-                leading: Icon(icon, color: iconColor),
+                leading: item is Donation
+                    ? _buildImage(item.imageBase64) // ✅ show Base64 image
+                    : Icon(icon, color: iconColor),
                 title: Text(itemText(item)),
                 onTap: () {
                   if (item is Donation) {
@@ -198,7 +217,8 @@ class _HomeScreenState extends State<HomeScreen> {
             emptyText: "No donations yet",
             icon: Icons.volunteer_activism,
             iconColor: Colors.orange,
-            itemText: (d) => "${d.itemName} (x${d.quantity}) • ${d.donorName}",
+            itemText: (d) =>
+            "${d.itemName} (x${d.quantity}) • ${d.donorName}",
           ),
         ),
       ),

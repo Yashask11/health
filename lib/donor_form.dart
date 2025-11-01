@@ -1,10 +1,9 @@
 import 'dart:io';
+import 'dart:convert'; // ✅ For base64 encoding
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:uuid/uuid.dart';
 
 class DonorForm extends StatefulWidget {
   const DonorForm({super.key});
@@ -75,18 +74,11 @@ class _DonorFormPageState extends State<DonorForm> {
     }
   }
 
-  Future<String?> _uploadImage(File imageFile) async {
-    try {
-      String fileId = const Uuid().v4();
-      final storageRef =
-      FirebaseStorage.instance.ref().child('donation_images/$fileId.jpg');
-
-      await storageRef.putFile(imageFile);
-      return await storageRef.getDownloadURL();
-    } catch (e) {
-      debugPrint("Image upload error: $e");
-      return null;
-    }
+  // ✅ Convert image to base64
+  String? _convertImageToBase64(File? imageFile) {
+    if (imageFile == null) return null;
+    final bytes = imageFile.readAsBytesSync();
+    return base64Encode(bytes);
   }
 
   Future<void> _submitForm() async {
@@ -120,10 +112,7 @@ class _DonorFormPageState extends State<DonorForm> {
     setState(() => _isSubmitting = true);
 
     try {
-      String? imageUrl;
-      if (_selectedImage != null) {
-        imageUrl = await _uploadImage(_selectedImage!);
-      }
+      String? imageBase64 = _convertImageToBase64(_selectedImage);
 
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) {
@@ -148,7 +137,7 @@ class _DonorFormPageState extends State<DonorForm> {
         'expiryDate': _donationType == 'Medicine'
             ? _selectedDate?.toIso8601String()
             : null,
-        'imageUrl': imageUrl ?? '',
+        'imageBase64': imageBase64 ?? '',
         'timestamp': FieldValue.serverTimestamp(),
         'donorEmail': currentUser.email,
         'donorUid': currentUser.uid,
@@ -213,7 +202,6 @@ class _DonorFormPageState extends State<DonorForm> {
               _buildTextField(
                   _addressController, "Address", Icons.location_on, skyBlue),
 
-              // Rest of your existing fields are unchanged...
               const SizedBox(height: 20),
 
               const Text(

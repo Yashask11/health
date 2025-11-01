@@ -1,6 +1,7 @@
+import 'dart:convert'; // ✅ For base64Decode
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'models/donation.dart'; // ✅ Import your donation model
+import 'models/donation.dart'; // ✅ Import your Donation model
 
 class DonationDetailScreen extends StatelessWidget {
   final Donation donation;
@@ -13,10 +14,10 @@ class DonationDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // ✅ Light background
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text("Donation Details"),
-        backgroundColor: Colors.lightBlueAccent, // ✅ Sky blue app bar
+        backgroundColor: Colors.lightBlueAccent,
         foregroundColor: Colors.white,
         elevation: 3,
       ),
@@ -87,6 +88,17 @@ class DonationDetailScreen extends StatelessWidget {
                   fit: BoxFit.cover,
                 ),
               )
+            else if (donation.imageBase64 != null &&
+                donation.imageBase64!.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.memory(
+                  base64Decode(donation.imageBase64!),
+                  height: 220,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              )
             else
               Container(
                 height: 220,
@@ -108,7 +120,6 @@ class DonationDetailScreen extends StatelessWidget {
   }
 
   // ---------- Helper Widget ----------
-  /// Builds a clean, consistent detail row with an icon, label, and value.
   Widget _buildDetailRow(IconData icon, String label, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
