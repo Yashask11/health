@@ -1,7 +1,8 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
+// removed receiver_form.dart (not used here)
 import 'receiver_form.dart';
 import 'donor_form.dart';
 import 'admin.dart';
@@ -21,12 +22,15 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  User? get currentUser => FirebaseAuth.instance.currentUser;
+
   final List<Request> requests = [];
   final List<Donation> donations = [];
-  final user = FirebaseAuth.instance.currentUser;
 
   final CollectionReference donationsRef =
   FirebaseFirestore.instance.collection('donations');
+  final CollectionReference requestsRef =
+  FirebaseFirestore.instance.collection('requests');
 
   String userName = "Loading...";
   String userEmail = "";
@@ -35,17 +39,25 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    final user = currentUser;
     if (user != null) {
-      userEmail = user!.email ?? '';
+      userEmail = user.email ?? '';
       _loadUserDetails();
+    } else {
+      // no signed-in user — set defaults
+      userName = "Guest";
+      userPhone = "N/A";
     }
   }
 
   Future<void> _loadUserDetails() async {
+    final user = currentUser;
+    if (user == null) return;
+
     try {
       final doc = await FirebaseFirestore.instance
           .collection('users')
-          .doc(user!.uid)
+          .doc(user.uid)
           .get();
 
       if (doc.exists) {
@@ -55,55 +67,94 @@ class _HomeScreenState extends State<HomeScreen> {
           userPhone = data['phone'] ?? 'N/A';
         });
 
-        // ✅ Load donations only after we have user details
-        listenToUserDonations(data['name'], data['phone']);
+        // Start listeners after we have user info
+        _listenToUserDonations();
+        _listenToUserRequests();
       } else {
         setState(() {
           userName = "User";
           userPhone = "N/A";
         });
-        listenToUserDonations("User", "N/A");
+        _listenToUserDonations();
+        _listenToUserRequests();
       }
-    } catch (e) {
+    } catch (e, st) {
+      // log and continue with defaults
+      debugPrint('Error loading user details: $e\n$st');
       setState(() {
         userName = "User";
         userPhone = "N/A";
       });
-      listenToUserDonations("User", "N/A");
+      _listenToUserDonations();
+      _listenToUserRequests();
     }
   }
 
-  void listenToUserDonations(String donorName, String donorPhone) {
-    donationsRef
-        .where('donorEmail', isEqualTo: user!.email)
+  void _listenToUserDonations() {
+    final user = currentUser;
+    if (user == null) return;
+
+    donationsRef.where('donorEmail', isEqualTo: user.email).snapshots().listen(
+          (snapshot) {
+        try {
+          final List<Donation> loaded = snapshot.docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            // if Donation.fromMap accepts id pass it, otherwise remove id param
+            try {
+              return Donation.fromMap(data, id: doc.id);
+            } catch (_) {
+              return Donation.fromMap(data);
+            }
+          }).toList();
+
+          setState(() {
+            donations
+              ..clear()
+              ..addAll(loaded);
+          });
+        } catch (e, st) {
+          debugPrint('Error parsing donations snapshot: $e\n$st');
+        }
+      },
+      onError: (err) => debugPrint('Donations snapshot error: $err'),
+    );
+  }
+
+  void _listenToUserRequests() {
+    final user = currentUser;
+    if (user == null) return;
+
+    // If this query triggers "requires index" at runtime, create the composite index in Firebase.
+    requestsRef
+        .where('receiverUid', isEqualTo: user.uid)
+        .orderBy('timestamp', descending: true)
         .snapshots()
-        .listen((snapshot) {
-      final List<Donation> loaded = snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        .listen(
+          (snapshot) {
+        try {
+          final List<Request> loaded = snapshot.docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return Request.fromMap(data, id: doc.id);
+          }).toList();
 
-        // ✅ Add missing donor info if not stored in donation
-        data['donorName'] ??= donorName;
-        data['donorPhone'] ??= donorPhone;
-
-        return Donation.fromMap(data);
-      }).toList();
-
-      setState(() {
-        donations
-          ..clear()
-          ..addAll(loaded);
-      });
-    });
+          setState(() {
+            requests
+              ..clear()
+              ..addAll(loaded);
+          });
+        } catch (e, st) {
+          debugPrint('Error parsing requests snapshot: $e\n$st');
+        }
+      },
+      onError: (err) => debugPrint('Requests snapshot error: $err'),
+    );
   }
 
   Future<void> _openReceiver() async {
-    final result = await Navigator.push<Request>(
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ReceiverPage()),
     );
-    if (result != null) {
-      setState(() => requests.add(result));
-    }
   }
 
   Future<void> _openDonor() async {
@@ -115,8 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildImage(String? imageUrl) {
     if (imageUrl == null || imageUrl.isEmpty) {
-      return const Icon(Icons.image_not_supported,
-          size: 60, color: Colors.grey);
+      return const Icon(Icons.image_not_supported, size: 60, color: Colors.grey);
     }
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
@@ -257,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icons.inventory,
             iconColor: Colors.green,
             itemText: (r) =>
-            "${r.itemName} (x${r.quantity}) • ${r.receiverName}",
+            "${r.itemName} • ${r.status} • ${r.receiverName} (${r.receiverPhone})",
           ),
         ),
       ),
@@ -266,6 +316,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final userEmailLocal = currentUser?.email ?? userEmail;
     return Scaffold(
       appBar: AppBar(
         title: const Text("Home"),
@@ -277,7 +328,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             UserAccountsDrawerHeader(
               accountName: Text(userName),
-              accountEmail: Text(userEmail),
+              accountEmail: Text(userEmailLocal),
               currentAccountPicture: const CircleAvatar(
                 backgroundColor: Colors.white,
                 child: Icon(Icons.person, size: 40, color: Colors.blueAccent),
@@ -294,7 +345,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   MaterialPageRoute(
                     builder: (_) => ProfileScreen(
                       name: userName,
-                      email: userEmail,
+                      email: userEmailLocal,
                       phone: userPhone,
                     ),
                   ),
@@ -331,10 +382,10 @@ class _HomeScreenState extends State<HomeScreen> {
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
-              title:
-              const Text("Sign Out", style: TextStyle(color: Colors.red)),
-              onTap: () {
-                Navigator.pop(context);
+              title: const Text("Sign Out",
+                  style: TextStyle(color: Colors.red)),
+              onTap: () async {
+                await FirebaseAuth.instance.signOut();
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -345,7 +396,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       body: RefreshIndicator(
-        onRefresh: () async {},
+        onRefresh: () async {
+          // optionally refresh manually
+          // no-op because listeners are live
+        },
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           physics: const AlwaysScrollableScrollPhysics(),
@@ -368,6 +422,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 iconColor: Colors.orange,
                 itemText: (d) =>
                 "${d.itemName} (x${d.quantity}) • ${d.donorName} • ${d.donorPhone}",
+              ),
+              const SizedBox(height: 20),
+              _buildSection<Request>(
+                title: "My Requests",
+                items: requests,
+                emptyText: "No requests yet",
+                icon: Icons.inventory,
+                iconColor: Colors.green,
+                itemText: (r) =>
+                "${r.itemName} • ${r.status} • ${r.receiverName} (${r.receiverPhone})",
               ),
             ],
           ),

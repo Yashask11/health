@@ -1,4 +1,3 @@
-// lib/receiver.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -22,7 +21,7 @@ class _ReceiverPageState extends State<ReceiverPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadUserProfile();
   }
 
@@ -33,7 +32,8 @@ class _ReceiverPageState extends State<ReceiverPage>
     _userUid = user.uid;
     _userEmail = user.email ?? "";
 
-    final doc = await FirebaseFirestore.instance.collection("users").doc(user.uid).get();
+    final doc =
+    await FirebaseFirestore.instance.collection("users").doc(user.uid).get();
 
     if (doc.exists) {
       setState(() {
@@ -48,15 +48,14 @@ class _ReceiverPageState extends State<ReceiverPage>
       final docId = item.id;
       final data = item.data() as Map<String, dynamic>;
 
-      // Check if available
       if (data['available'] <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Item not available"), backgroundColor: Colors.red),
+          const SnackBar(
+              content: Text("Item not available"), backgroundColor: Colors.red),
         );
         return;
       }
 
-      // ✅ Add to requests
       await FirebaseFirestore.instance.collection("requests").add({
         "receiverUid": _userUid,
         "receiverName": _userName,
@@ -68,10 +67,11 @@ class _ReceiverPageState extends State<ReceiverPage>
         "timestamp": FieldValue.serverTimestamp(),
         "status": "Pending",
         "imageUrl": data['imageUrl'],
+        "donationId": docId, // ✅ link back to the donation
       });
 
-      // ✅ decrement available count
-      await FirebaseFirestore.instance.collection("donations")
+      await FirebaseFirestore.instance
+          .collection("donations")
           .doc(docId)
           .update({"available": data['available'] - 1});
 
@@ -79,6 +79,42 @@ class _ReceiverPageState extends State<ReceiverPage>
         const SnackBar(
           content: Text("✅ Request sent successfully"),
           backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  /// ✅ Cancel request function
+  Future<void> _cancelRequest(DocumentSnapshot request) async {
+    try {
+      final data = request.data() as Map<String, dynamic>;
+      final donationId = data['donationId'];
+
+      // Restore availability
+      if (donationId != null) {
+        final donationRef =
+        FirebaseFirestore.instance.collection("donations").doc(donationId);
+        final donationDoc = await donationRef.get();
+        if (donationDoc.exists) {
+          final currentAvailable = donationDoc['available'] ?? 0;
+          await donationRef.update({"available": currentAvailable + 1});
+        }
+      }
+
+      // Delete request
+      await FirebaseFirestore.instance
+          .collection("requests")
+          .doc(request.id)
+          .delete();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("❌ Request canceled"),
+          backgroundColor: Colors.orange,
         ),
       );
     } catch (e) {
@@ -97,7 +133,8 @@ class _ReceiverPageState extends State<ReceiverPage>
       child: ListTile(
         contentPadding: const EdgeInsets.all(12),
         leading: data['imageUrl'] != null && data['imageUrl'] != ""
-            ? Image.network(data['imageUrl'], width: 70, height: 70, fit: BoxFit.cover)
+            ? Image.network(data['imageUrl'],
+            width: 70, height: 70, fit: BoxFit.cover)
             : const Icon(Icons.image, size: 50),
         title: Text(
           data['itemName'] ?? "",
@@ -107,7 +144,8 @@ class _ReceiverPageState extends State<ReceiverPage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (data['expiryDate'] != null)
-              Text("Expiry: ${data['expiryDate']}", style: const TextStyle(color: Colors.red)),
+              Text("Expiry: ${data['expiryDate']}",
+                  style: const TextStyle(color: Colors.red)),
             Text("Available: ${data['available']}"),
           ],
         ),
@@ -128,10 +166,13 @@ class _ReceiverPageState extends State<ReceiverPage>
           .where("available", isGreaterThan: 0)
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
         final docs = snapshot.data!.docs;
-        if (docs.isEmpty) return const Center(child: Text("No medicines available"));
-
+        if (docs.isEmpty) {
+          return const Center(child: Text("No medicines available"));
+        }
         return ListView.builder(
           padding: const EdgeInsets.all(15),
           itemCount: docs.length,
@@ -149,14 +190,86 @@ class _ReceiverPageState extends State<ReceiverPage>
           .where("available", isGreaterThan: 0)
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
         final docs = snapshot.data!.docs;
-        if (docs.isEmpty) return const Center(child: Text("No equipment available"));
-
+        if (docs.isEmpty) {
+          return const Center(child: Text("No equipment available"));
+        }
         return ListView.builder(
           padding: const EdgeInsets.all(15),
           itemCount: docs.length,
           itemBuilder: (context, i) => _buildItemCard(docs[i]),
+        );
+      },
+    );
+  }
+
+  /// ✅ NEW TAB: My Requests
+  Widget _myRequestsTab() {
+    return StreamBuilder(
+      stream: FirebaseFirestore.instance
+          .collection("requests")
+          .where("receiverUid", isEqualTo: _userUid)
+          .orderBy("timestamp", descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final docs = snapshot.data!.docs;
+        if (docs.isEmpty) {
+          return const Center(child: Text("No requests yet"));
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(15),
+          itemCount: docs.length,
+          itemBuilder: (context, i) {
+            final data = docs[i].data() as Map<String, dynamic>;
+            final isPending = data['status'] == "Pending";
+
+            return Card(
+              elevation: 3,
+              margin: const EdgeInsets.symmetric(vertical: 10),
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(12),
+                leading: data['imageUrl'] != null && data['imageUrl'] != ""
+                    ? Image.network(data['imageUrl'],
+                    width: 70, height: 70, fit: BoxFit.cover)
+                    : const Icon(Icons.image, size: 50),
+                title: Text(
+                  data['itemName'] ?? "",
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Type: ${data['type']}"),
+                    Text("Status: ${data['status']}",
+                        style: TextStyle(
+                          color: data['status'] == "Pending"
+                              ? Colors.orange
+                              : data['status'] == "Approved"
+                              ? Colors.green
+                              : Colors.red,
+                          fontWeight: FontWeight.bold,
+                        )),
+                  ],
+                ),
+                trailing: isPending
+                    ? TextButton(
+                  onPressed: () => _cancelRequest(docs[i]),
+                  style: TextButton.styleFrom(
+                      foregroundColor: Colors.redAccent),
+                  child: const Text("Cancel"),
+                )
+                    : null,
+              ),
+            );
+          },
         );
       },
     );
@@ -175,6 +288,7 @@ class _ReceiverPageState extends State<ReceiverPage>
           tabs: const [
             Tab(icon: Icon(Icons.medication), text: "Medicines"),
             Tab(icon: Icon(Icons.medical_services), text: "Equipment"),
+            Tab(icon: Icon(Icons.history), text: "My Requests"),
           ],
         ),
       ),
@@ -183,6 +297,7 @@ class _ReceiverPageState extends State<ReceiverPage>
         children: [
           _medicinesTab(),
           _equipmentTab(),
+          _myRequestsTab(),
         ],
       ),
     );
