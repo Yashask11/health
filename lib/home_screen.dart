@@ -1,9 +1,9 @@
+// lib/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-// removed receiver_form.dart (not used here)
-import 'receiver_form.dart';
+import 'request_form_page.dart';
 import 'donor_form.dart';
 import 'admin.dart';
 import 'models/request.dart';
@@ -44,7 +44,6 @@ class _HomeScreenState extends State<HomeScreen> {
       userEmail = user.email ?? '';
       _loadUserDetails();
     } else {
-      // no signed-in user — set defaults
       userName = "Guest";
       userPhone = "N/A";
     }
@@ -55,36 +54,21 @@ class _HomeScreenState extends State<HomeScreen> {
     if (user == null) return;
 
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+      final doc =
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
 
-      if (doc.exists) {
-        final data = doc.data()!;
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data() as Map<String, dynamic>;
         setState(() {
-          userName = data['name'] ?? 'User';
-          userPhone = data['phone'] ?? 'N/A';
+          userName = (data['name'] ?? 'User').toString();
+          userPhone = (data['phone'] ?? 'N/A').toString();
         });
-
-        // Start listeners after we have user info
-        _listenToUserDonations();
-        _listenToUserRequests();
-      } else {
-        setState(() {
-          userName = "User";
-          userPhone = "N/A";
-        });
-        _listenToUserDonations();
-        _listenToUserRequests();
       }
+
+      _listenToUserDonations();
+      _listenToUserRequests();
     } catch (e, st) {
-      // log and continue with defaults
       debugPrint('Error loading user details: $e\n$st');
-      setState(() {
-        userName = "User";
-        userPhone = "N/A";
-      });
       _listenToUserDonations();
       _listenToUserRequests();
     }
@@ -94,17 +78,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = currentUser;
     if (user == null) return;
 
-    donationsRef.where('donorEmail', isEqualTo: user.email).snapshots().listen(
+    donationsRef.snapshots().listen(
           (snapshot) {
         try {
           final List<Donation> loaded = snapshot.docs.map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            // if Donation.fromMap accepts id pass it, otherwise remove id param
-            try {
-              return Donation.fromMap(data, id: doc.id);
-            } catch (_) {
-              return Donation.fromMap(data);
-            }
+            final data = (doc.data() as Map<String, dynamic>?) ?? {};
+            return Donation.fromMap(data);
           }).toList();
 
           setState(() {
@@ -124,30 +103,26 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = currentUser;
     if (user == null) return;
 
-    // If this query triggers "requires index" at runtime, create the composite index in Firebase.
     requestsRef
         .where('receiverUid', isEqualTo: user.uid)
         .orderBy('timestamp', descending: true)
         .snapshots()
-        .listen(
-          (snapshot) {
-        try {
-          final List<Request> loaded = snapshot.docs.map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            return Request.fromMap(data, id: doc.id);
-          }).toList();
+        .listen((snapshot) {
+      try {
+        final List<Request> loaded = snapshot.docs.map((doc) {
+          final data = (doc.data() as Map<String, dynamic>?) ?? {};
+          return Request.fromMap(data, id: doc.id);
+        }).toList();
 
-          setState(() {
-            requests
-              ..clear()
-              ..addAll(loaded);
-          });
-        } catch (e, st) {
-          debugPrint('Error parsing requests snapshot: $e\n$st');
-        }
-      },
-      onError: (err) => debugPrint('Requests snapshot error: $err'),
-    );
+        setState(() {
+          requests
+            ..clear()
+            ..addAll(loaded);
+        });
+      } catch (e, st) {
+        debugPrint('Error parsing requests snapshot: $e\n$st');
+      }
+    }, onError: (err) => debugPrint('Requests snapshot error: $err'));
   }
 
   Future<void> _openReceiver() async {
@@ -160,7 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openDonor() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const DonorForm()),
+      MaterialPageRoute(builder: (_) => const DonorFormPage()),
     );
   }
 
@@ -175,9 +150,8 @@ class _HomeScreenState extends State<HomeScreen> {
         fit: BoxFit.cover,
         height: 60,
         width: 60,
-        errorBuilder: (context, error, stackTrace) {
-          return const Icon(Icons.broken_image, size: 60, color: Colors.grey);
-        },
+        errorBuilder: (context, error, stackTrace) =>
+        const Icon(Icons.broken_image, size: 60, color: Colors.grey),
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
           return const SizedBox(
@@ -382,8 +356,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text("Sign Out",
-                  style: TextStyle(color: Colors.red)),
+              title:
+              const Text("Sign Out", style: TextStyle(color: Colors.red)),
               onTap: () async {
                 await FirebaseAuth.instance.signOut();
                 Navigator.pushReplacement(
@@ -396,10 +370,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          // optionally refresh manually
-          // no-op because listeners are live
-        },
+        onRefresh: () async {},
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           physics: const AlwaysScrollableScrollPhysics(),
