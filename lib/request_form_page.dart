@@ -1,7 +1,7 @@
-// lib/receiver.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'donor_detail_page.dart'; // 👈 import this new detail page
 
 class ReceiverPage extends StatefulWidget {
   const ReceiverPage({super.key});
@@ -44,7 +44,7 @@ class _ReceiverPageState extends State<ReceiverPage>
     }
   }
 
-  // ✅ Send request without decrementing
+  // ✅ Send request to Firestore
   Future<void> _requestItem(DocumentSnapshot item) async {
     try {
       final data = item.data() as Map<String, dynamic>;
@@ -123,11 +123,20 @@ class _ReceiverPageState extends State<ReceiverPage>
             );
           },
         ),
+        onTap: () {
+          // 👇 Navigate to detail screen on click
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DonationDetailPage(itemData: data),
+            ),
+          );
+        },
       ),
     );
   }
 
-  // ✅ Medicines tab (no available filter)
+  // ✅ Medicines tab
   Widget _medicinesTab() {
     return StreamBuilder(
       stream: FirebaseFirestore.instance
@@ -152,7 +161,7 @@ class _ReceiverPageState extends State<ReceiverPage>
     );
   }
 
-  // ✅ Equipment tab (no available filter)
+  // ✅ Equipment tab
   Widget _equipmentTab() {
     return StreamBuilder(
       stream: FirebaseFirestore.instance
