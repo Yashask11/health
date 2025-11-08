@@ -5,7 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import 'request_form_page.dart';
 import 'donor_form.dart';
-import 'admin.dart';
 import 'models/request.dart';
 import 'models/donation.dart';
 import 'profile_screen.dart';
@@ -78,25 +77,26 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = currentUser;
     if (user == null) return;
 
-    donationsRef.snapshots().listen(
-          (snapshot) {
-        try {
-          final List<Donation> loaded = snapshot.docs.map((doc) {
-            final data = (doc.data() as Map<String, dynamic>?) ?? {};
-            return Donation.fromMap(data);
-          }).toList();
+    donationsRef
+        .where('donorUid', isEqualTo: user.uid)
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .listen((snapshot) {
+      try {
+        final List<Donation> loaded = snapshot.docs.map((doc) {
+          final data = (doc.data() as Map<String, dynamic>?) ?? {};
+          return Donation.fromMap(data);
+        }).toList();
 
-          setState(() {
-            donations
-              ..clear()
-              ..addAll(loaded);
-          });
-        } catch (e, st) {
-          debugPrint('Error parsing donations snapshot: $e\n$st');
-        }
-      },
-      onError: (err) => debugPrint('Donations snapshot error: $err'),
-    );
+        setState(() {
+          donations
+            ..clear()
+            ..addAll(loaded);
+        });
+      } catch (e, st) {
+        debugPrint('Error parsing donations snapshot: $e\n$st');
+      }
+    }, onError: (err) => debugPrint('Donations snapshot error: $err'));
   }
 
   void _listenToUserRequests() {
@@ -135,7 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openDonor() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const DonorFormPage()),
+      MaterialPageRoute(builder: (_) => const DonorForm()),
     );
   }
 
@@ -356,8 +356,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
-              title:
-              const Text("Sign Out", style: TextStyle(color: Colors.red)),
+              title: const Text("Sign Out", style: TextStyle(color: Colors.red)),
               onTap: () async {
                 await FirebaseAuth.instance.signOut();
                 Navigator.pushReplacement(
@@ -378,12 +377,6 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               _buildBigButton("Donor", "assets/donor.png", _openDonor),
               _buildBigButton("Receiver", "assets/receiver.png", _openReceiver),
-              _buildBigButton("Admin", "assets/admin.png", () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AdminPage()),
-                );
-              }),
               const SizedBox(height: 20),
               _buildSection<Donation>(
                 title: "My Donations",
