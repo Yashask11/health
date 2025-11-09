@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart'; // ✅ for image upload
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:uuid/uuid.dart';
+import 'notifications_screen.dart'; // ✅ Add this import
 
 class DonorForm extends StatefulWidget {
   const DonorForm({super.key});
@@ -69,7 +70,6 @@ class _DonorFormPageState extends State<DonorForm> {
     }
   }
 
-  // ✅ Upload image to Firebase Storage and return URL
   Future<String?> _uploadImageToStorage(File? imageFile) async {
     if (imageFile == null) return null;
     try {
@@ -83,7 +83,6 @@ class _DonorFormPageState extends State<DonorForm> {
     }
   }
 
-  // ✅ Expiry Date Picker (fixed)
   Future<void> _pickExpiryDate() async {
     DateTime now = DateTime.now();
     final picked = await showDatePicker(
@@ -104,7 +103,6 @@ class _DonorFormPageState extends State<DonorForm> {
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Medicine-specific validation
     if (_donationType == "Medicine") {
       if (_expiryDateController.text.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -138,7 +136,6 @@ class _DonorFormPageState extends State<DonorForm> {
     try {
       final docRef = FirebaseFirestore.instance.collection('donations').doc();
 
-      // ✅ Upload image to Firebase Storage
       String? imageUrl = await _uploadImageToStorage(_imageFile);
 
       await docRef.set({
@@ -179,167 +176,171 @@ class _DonorFormPageState extends State<DonorForm> {
     const skyBlue = Color(0xFF87CEEB);
 
     return Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          title: const Text("Donation Form", style: TextStyle(color: Colors.black)),
-          backgroundColor: skyBlue,
-          iconTheme: const IconThemeData(color: Colors.white),
-        ),
-        body: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text("Donation Form", style: TextStyle(color: Colors.black)),
+        backgroundColor: skyBlue,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications, color: Colors.white), // ✅ Added notifications icon
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+              );
+            },
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text("🧑‍🤝‍🧑 Donor (auto-filled)"),
+              const SizedBox(height: 6),
+              TextFormField(
+                controller: _addressController,
+                decoration: const InputDecoration(
+                  labelText: "Address (editable)",
+                  prefixIcon: Icon(Icons.location_on),
+                ),
+                validator: (v) => v == null || v.isEmpty ? "Please enter address" : null,
+              ),
+              const SizedBox(height: 16),
+              const Text("🎁 Donation Type", style: TextStyle(fontWeight: FontWeight.bold)),
+              Row(
                 children: [
-                  const Text("🧑‍🤝‍🧑 Donor (auto-filled)"),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _addressController,
-                    decoration: const InputDecoration(
-                      labelText: "Address (editable)",
-                      prefixIcon: Icon(Icons.location_on),
-                    ),
-                    validator: (v) => v == null || v.isEmpty ? "Please enter address" : null,
-                  ),
-                  const SizedBox(height: 16),
-
-                  const Text("🎁 Donation Type", style: TextStyle(fontWeight: FontWeight.bold)),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: RadioListTile<String>(
-                          title: const Text("Medicine"),
-                          value: "Medicine",
-                          groupValue: _donationType,
-                          onChanged: (v) => setState(() => _donationType = v!),
-                        ),
-                      ),
-                      Expanded(
-                        child: RadioListTile<String>(
-                          title: const Text("Equipment"),
-                          value: "Equipment",
-                          groupValue: _donationType,
-                          onChanged: (v) => setState(() => _donationType = v!),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  TextFormField(
-                    controller: _itemNameController,
-                    decoration: const InputDecoration(
-                      labelText: "Item Name",
-                      prefixIcon: Icon(Icons.shopping_bag),
-                    ),
-                    validator: (v) => v == null || v.isEmpty ? "Enter item name" : null,
-                  ),
-
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _itemQuantityController,
-                    decoration: const InputDecoration(
-                      labelText: "Quantity",
-                      prefixIcon: Icon(Icons.format_list_numbered),
-                    ),
-                    keyboardType: TextInputType.number,
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return "Enter quantity";
-                      if (int.tryParse(v) == null || int.parse(v) <= 0) return "Enter valid quantity";
-                      return null;
-                    },
-                  ),
-
-                  if (_donationType == 'Medicine') ...[
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _expiryDateController.text.isEmpty
-                                ? "No expiry selected"
-                                : "Expiry: ${_expiryDateController.text}",
-                          ),
-                        ),
-                        ElevatedButton(
-                          onPressed: _pickExpiryDate,
-                          style: ElevatedButton.styleFrom(backgroundColor: skyBlue),
-                          child: const Text("Pick Date"),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      "⚠ Please select a date at least 6 months ahead before submitting.\n⚠ Please confirm medicine safety before submitting.",
-                      style: TextStyle(color: Colors.redAccent, fontStyle: FontStyle.italic),
-                    ),
-                  ],
-
-                  if (_donationType == 'Equipment') ...[
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _conditionController,
-                      decoration: const InputDecoration(
-                        labelText: "Condition (Good/Needs Repair)",
-                        prefixIcon: Icon(Icons.build_circle),
-                      ),
-                    ),
-                  ],
-
-                  const SizedBox(height: 20),
-                  Center(
-                    child: Column(
-                      children: [
-                        _imageFile != null
-                            ? ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.file(
-                            _imageFile!,
-                            height: 150,
-                            width: 150,
-                            fit: BoxFit.cover,
-                          ),
-                        )
-                            : Container(
-                          height: 150,
-                          width: 150,
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: skyBlue),
-                          ),
-                          child: const Icon(Icons.image, size: 70, color: Colors.grey),
-                        ),
-                        const SizedBox(height: 8),
-                        ElevatedButton.icon(
-                          onPressed: _pickImage,
-                          icon: const Icon(Icons.upload_file),
-                          label: const Text("Upload Image"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: skyBlue,
-                            side: BorderSide(color: skyBlue),
-                          ),
-                        ),
-                      ],
+                  Expanded(
+                    child: RadioListTile<String>(
+                      title: const Text("Medicine"),
+                      value: "Medicine",
+                      groupValue: _donationType,
+                      onChanged: (v) => setState(() => _donationType = v!),
                     ),
                   ),
-
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _isSubmitting ? null : _submitForm,
-                      style: ElevatedButton.styleFrom(backgroundColor: skyBlue),
-                      child: _isSubmitting
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text("Submit Donation"),
+                  Expanded(
+                    child: RadioListTile<String>(
+                      title: const Text("Equipment"),
+                      value: "Equipment",
+                      groupValue: _donationType,
+                      onChanged: (v) => setState(() => _donationType = v!),
                     ),
                   ),
                 ],
               ),
-            ),
-         ),
-        );
-    }
+              TextFormField(
+                controller: _itemNameController,
+                decoration: const InputDecoration(
+                  labelText: "Item Name",
+                  prefixIcon: Icon(Icons.shopping_bag),
+                ),
+                validator: (v) => v == null || v.isEmpty ? "Enter item name" : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _itemQuantityController,
+                decoration: const InputDecoration(
+                  labelText: "Quantity",
+                  prefixIcon: Icon(Icons.format_list_numbered),
+                ),
+                keyboardType: TextInputType.number,
+                validator: (v) {
+                  if (v == null || v.isEmpty) return "Enter quantity";
+                  if (int.tryParse(v) == null || int.parse(v) <= 0) return "Enter valid quantity";
+                  return null;
+                },
+              ),
+              if (_donationType == 'Medicine') ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _expiryDateController.text.isEmpty
+                            ? "No expiry selected"
+                            : "Expiry: ${_expiryDateController.text}",
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: _pickExpiryDate,
+                      style: ElevatedButton.styleFrom(backgroundColor: skyBlue),
+                      child: const Text("Pick Date"),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "⚠ Please select a date at least 6 months ahead before submitting.\n⚠ Please confirm medicine safety before submitting.",
+                  style: TextStyle(color: Colors.redAccent, fontStyle: FontStyle.italic),
+                ),
+              ],
+              if (_donationType == 'Equipment') ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _conditionController,
+                  decoration: const InputDecoration(
+                    labelText: "Condition (Good/Needs Repair)",
+                    prefixIcon: Icon(Icons.build_circle),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              Center(
+                child: Column(
+                  children: [
+                    _imageFile != null
+                        ? ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        _imageFile!,
+                        height: 150,
+                        width: 150,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                        : Container(
+                      height: 150,
+                      width: 150,
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: skyBlue),
+                      ),
+                      child: const Icon(Icons.image, size: 70, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: _pickImage,
+                      icon: const Icon(Icons.upload_file),
+                      label: const Text("Upload Image"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: skyBlue,
+                        side: BorderSide(color: skyBlue),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _isSubmitting ? null : _submitForm,
+                  style: ElevatedButton.styleFrom(backgroundColor: skyBlue),
+                  child: _isSubmitting
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("Submit Donation"),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

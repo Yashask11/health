@@ -71,6 +71,27 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     return null;
   }
 
+  Future<void> _notifyDonor() async {
+    try {
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'toUid': widget.request.donorUid,
+        'fromUid': widget.request.receiverUid,
+        'title': 'New Request Received',
+        'body': '${widget.request.itemName} has been requested.',
+        'timestamp': FieldValue.serverTimestamp(),
+        'read': false,
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notification sent to donor!')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sending notification: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final request = widget.request;
@@ -107,9 +128,8 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                           height: 160,
                           width: 160,
                           fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) => const Icon(
-                              Icons.broken_image,
-                              size: 80),
+                          errorBuilder: (c, e, s) =>
+                          const Icon(Icons.broken_image, size: 80),
                           loadingBuilder: (c, child, progress) {
                             if (progress == null) return child;
                             return const SizedBox(
@@ -161,6 +181,27 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                   _buildDetailRow("🏠 Address", donorAddress),
                   const SizedBox(height: 12),
                   _buildDetailRow("📌 Status", status),
+                  const SizedBox(height: 24),
+                  Center(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: _notifyDonor,
+                      icon: const Icon(Icons.notifications_active,
+                          color: Colors.white),
+                      label: const Text(
+                        "Notify Donor",
+                        style: TextStyle(
+                            fontSize: 16, color: Colors.white),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
