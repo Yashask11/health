@@ -1,80 +1,80 @@
-import 'dart:io';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum DonationType { medicine, equipment }
 
 class Donation {
-  final DonationType type;
+  final String id;
   final String itemName;
   final int quantity;
+  final DonationType type;
   final String donorName;
-  final String donorPhone; // ✅ Renamed for consistency
+  final String donorPhone;
   final String address;
-  final int available;
-
-  final File? imageFile; // Local file used during upload
-  final String? imageUrl; // ✅ Firebase Storage URL
-
+  final bool available;
+  final String? imageUrl;
   final DateTime? expiryDate;
-  final bool? isConfirmed;
   final String? condition;
+  final String donorUid; // ✅ ensures ownership tracking
+  final Timestamp? timestamp; // ✅ for sorting
 
   Donation({
-    required this.type,
+    required this.id,
     required this.itemName,
     required this.quantity,
+    required this.type,
     required this.donorName,
     required this.donorPhone,
     required this.address,
     required this.available,
-    this.imageFile,
     this.imageUrl,
     this.expiryDate,
-    this.isConfirmed,
     this.condition,
+    required this.donorUid,
+    this.timestamp,
   });
 
-  // ✅ Convert Donation → Map (for Firebase upload)
-  Map<String, dynamic> toMap() {
-    return {
-      'type': type.name, // "medicine" or "equipment"
-      'itemName': itemName,
-      'quantity': quantity,
-      'donorName': donorName,
-      'donorPhone': donorPhone, // ✅ Consistent field name
-      'address': address,
-      'available': available,
-      'imageUrl': imageUrl,
-      'expiryDate': expiryDate?.toIso8601String(),
-      'isConfirmed': isConfirmed,
-      'condition': condition,
-    };
-  }
-
-  // ✅ Convert Map → Donation (for fetching from Firebase)
-  factory Donation.fromMap(Map<String, dynamic> map) {
+  factory Donation.fromMap(String id, Map<String, dynamic> data) {
     return Donation(
-      type: map['type'] == 'medicine'
-          ? DonationType.medicine
-          : DonationType.equipment,
-      itemName: map['itemName'] ?? '',
-      quantity: int.tryParse(map['quantity'].toString()) ?? 0,
-      donorName: map['donorName'] ?? '',
-      donorPhone: map['donorPhone'] ?? map['phone'] ?? '', // ✅ fallback support
-      address: map['address'] ?? '',
-      available: int.tryParse(map['available'].toString()) ?? 1,
-      imageUrl: map['imageUrl'],
-      expiryDate: map['expiryDate'] != null
-          ? DateTime.tryParse(map['expiryDate'])
+      id: id,
+      itemName: data['itemName'] ?? '',
+      quantity: data['quantity'] is int
+          ? data['quantity']
+          : int.tryParse(data['quantity']?.toString() ?? '0') ?? 0,
+      type: data['type'] == 'equipment'
+          ? DonationType.equipment
+          : DonationType.medicine,
+      donorName: data['donorName'] ?? '',
+      donorPhone: data['donorPhone'] ?? '',
+      address: data['address'] ?? '',
+      available: data['available'] is bool
+          ? data['available']
+          : (data['available'].toString() == 'true'),
+      imageUrl: data['imageUrl'],
+      expiryDate: data['expiryDate'] is Timestamp
+          ? (data['expiryDate'] as Timestamp).toDate()
+          : data['expiryDate'] is String
+          ? DateTime.tryParse(data['expiryDate'])
           : null,
-      isConfirmed: map['isConfirmed'] ?? false,
-      condition: map['condition'],
+      condition: data['condition'],
+      donorUid: data['donorUid'] ?? '',
+      timestamp: data['timestamp'] is Timestamp ? data['timestamp'] : null,
     );
   }
 
-  // ✅ Convert Firebase snapshot → Donation
-  factory Donation.fromSnapshot(DataSnapshot snapshot) {
-    final data = Map<String, dynamic>.from(snapshot.value as Map);
-    return Donation.fromMap(data);
+  Map<String, dynamic> toMap() {
+    return {
+      'itemName': itemName,
+      'quantity': quantity,
+      'type': type == DonationType.medicine ? 'medicine' : 'equipment',
+      'donorName': donorName,
+      'donorPhone': donorPhone,
+      'address': address,
+      'available': available,
+      'imageUrl': imageUrl,
+      'expiryDate': expiryDate != null ? Timestamp.fromDate(expiryDate!) : null,
+      'condition': condition,
+      'donorUid': donorUid,
+      'timestamp': timestamp ?? FieldValue.serverTimestamp(),
+    };
   }
 }

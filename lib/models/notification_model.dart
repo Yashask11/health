@@ -2,33 +2,37 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AppNotification {
   final String id;
+  final String donorUid;
   final String title;
   final String message;
-  final DateTime timestamp;
+  final Timestamp timestamp;
 
   AppNotification({
     required this.id,
+    required this.donorUid,
     required this.title,
     required this.message,
     required this.timestamp,
   });
 
-  // ✅ Correct order → (Map data, String id)
-  factory AppNotification.fromMap(Map<String, dynamic> data, String id) {
+  factory AppNotification.fromMap(String id, Map<String, dynamic> data) {
     return AppNotification(
       id: id,
-      title: data['title'] ?? '',
+      donorUid: data['donorUid'] ?? '',
+      title: data['title'] ?? 'Notification',
       message: data['message'] ?? '',
-      timestamp: (data['timestamp'] as Timestamp).toDate(),
+      timestamp: data['timestamp'] is Timestamp
+          ? data['timestamp']
+          : Timestamp.now(),
     );
   }
 
-  // Optional: If you ever need to upload notifications
   Map<String, dynamic> toMap() {
     return {
+      'donorUid': donorUid,
       'title': title,
       'message': message,
-      'timestamp': Timestamp.fromDate(timestamp),
+      'timestamp': timestamp,
     };
   }
 }

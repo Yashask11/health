@@ -1,4 +1,3 @@
-// lib/models/request.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Request {
@@ -8,7 +7,6 @@ class Request {
   final String receiverEmail;
   final String receiverPhone;
 
-  // donor details included so receiver can see donor info later
   final String donorUid;
   final String? donorName;
   final String? donorEmail;
@@ -41,38 +39,30 @@ class Request {
     this.timestamp,
   });
 
-  factory Request.fromMap(Map<String, dynamic> data, {String? id}) {
-    int? parsedQuantity;
-    if (data['quantity'] is int) {
-      parsedQuantity = data['quantity'] as int;
-    } else if (data['quantity'] != null) {
-      parsedQuantity = int.tryParse(data['quantity'].toString());
-    }
-
+  factory Request.fromMap(String id, Map<String, dynamic> data) {
     DateTime? parsedTimestamp;
     final ts = data['timestamp'];
-    if (ts is Timestamp) {
-      parsedTimestamp = ts.toDate();
-    } else if (ts is String) {
-      parsedTimestamp = DateTime.tryParse(ts);
-    }
+    if (ts is Timestamp) parsedTimestamp = ts.toDate();
+    else if (ts is String) parsedTimestamp = DateTime.tryParse(ts);
 
     return Request(
-      id: id ?? (data['id'] ?? '') as String,
-      receiverUid: (data['receiverUid'] ?? '') as String,
-      receiverName: (data['receiverName'] ?? '') as String,
-      receiverEmail: (data['receiverEmail'] ?? '') as String,
-      receiverPhone: (data['receiverPhone'] ?? '') as String,
-      donorUid: (data['donorUid'] ?? '') as String,
-      donorName: data['donorName'] != null ? data['donorName'].toString() : null,
-      donorEmail: data['donorEmail'] != null ? data['donorEmail'].toString() : null,
-      donorPhone: data['donorPhone'] != null ? data['donorPhone'].toString() : null,
-      donorAddress: data['donorAddress'] != null ? data['donorAddress'].toString() : null,
-      itemName: (data['itemName'] ?? '') as String,
-      type: (data['type'] ?? '') as String,
-      status: (data['status'] ?? 'Pending') as String,
-      imageUrl: data['imageUrl'] != null ? data['imageUrl'].toString() : null,
-      quantity: parsedQuantity,
+      id: id,
+      receiverUid: data['receiverUid'] ?? '',
+      receiverName: data['receiverName'] ?? '',
+      receiverEmail: data['receiverEmail'] ?? '',
+      receiverPhone: data['receiverPhone'] ?? '',
+      donorUid: data['donorUid'] ?? '',
+      donorName: data['donorName'],
+      donorEmail: data['donorEmail'],
+      donorPhone: data['donorPhone'],
+      donorAddress: data['donorAddress'],
+      itemName: data['itemName'] ?? '',
+      type: data['type'] ?? '',
+      status: data['status'] ?? 'Pending',
+      imageUrl: data['imageUrl'],
+      quantity: data['quantity'] is int
+          ? data['quantity']
+          : int.tryParse(data['quantity']?.toString() ?? ''),
       timestamp: parsedTimestamp,
     );
   }
@@ -93,7 +83,9 @@ class Request {
       'status': status,
       'imageUrl': imageUrl,
       'quantity': quantity,
-      'timestamp': timestamp != null ? Timestamp.fromDate(timestamp!) : FieldValue.serverTimestamp(),
+      'timestamp': timestamp != null
+          ? Timestamp.fromDate(timestamp!)
+          : FieldValue.serverTimestamp(),
     };
   }
 }

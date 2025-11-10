@@ -1,154 +1,156 @@
 import 'package:flutter/material.dart';
-import 'models/donation.dart'; // ✅ Import your Donation model
 
-class DonationDetailScreen extends StatelessWidget {
-  final Donation donation;
+class DonationDetailPage extends StatelessWidget {
+  final Map<String, dynamic> itemData;
 
-  const DonationDetailScreen({
-    super.key,
-    required this.donation,
-  });
+  const DonationDetailPage({super.key, required this.itemData});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Donation Details"),
+        title: Text(itemData['itemName'] ?? "Donation Details"),
         backgroundColor: Colors.lightBlueAccent,
-        foregroundColor: Colors.white,
-        elevation: 3,
       ),
-
-      // ---------- BODY ----------
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ListView(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ---------- Item Name ----------
-            Center(
-              child: Text(
-                donation.itemName,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.lightBlue,
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // ---------- Quantity ----------
-            _buildDetailRow(Icons.inventory, "Quantity", "${donation.quantity}"),
-            const SizedBox(height: 12),
-
-            // ---------- Expiry Date (only for Medicine) ----------
-            if (donation.type == DonationType.medicine &&
-                donation.expiryDate != null)
-              _buildDetailRow(
-                Icons.date_range,
-                "Expiry Date",
-                "${donation.expiryDate!.day}-${donation.expiryDate!.month}-${donation.expiryDate!.year}",
-              ),
-
-            // ---------- Condition (only for Equipment) ----------
-            if (donation.type == DonationType.equipment &&
-                donation.condition != null)
-              _buildDetailRow(Icons.build, "Condition", donation.condition!),
-
-            const SizedBox(height: 12),
-
-            // ---------- Donor Information ----------
-            _buildDetailRow(Icons.person, "Donor Name", donation.donorName),
-            const SizedBox(height: 12),
-            _buildDetailRow(Icons.phone, "Phone", donation.donorPhone), // ✅ updated field
-            const SizedBox(height: 12),
-            _buildDetailRow(Icons.location_on, "Address", donation.address),
-            const SizedBox(height: 12),
-
-            // ---------- Availability ----------
-            _buildDetailRow(
-              Icons.check_circle,
-              "Available",
-              donation.available > 0 ? "Yes" : "No",
-            ),
-
-            const SizedBox(height: 20),
-
-            // ---------- Image Section ----------
-            if (donation.imageUrl != null && donation.imageUrl!.isNotEmpty)
+            // ✅ Image Section
+            if (itemData['imageUrl'] != null && itemData['imageUrl'] != "")
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: Image.network(
-                  donation.imageUrl!,
-                  height: 220,
+                  itemData['imageUrl'],
                   width: double.infinity,
+                  height: 200,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return _buildNoImageContainer("Image failed to load");
-                  },
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return SizedBox(
-                      height: 220,
-                      width: double.infinity,
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          value: loadingProgress.expectedTotalBytes != null
-                              ? loadingProgress.cumulativeBytesLoaded /
-                              loadingProgress.expectedTotalBytes!
-                              : null,
-                        ),
-                      ),
-                    );
-                  },
                 ),
               )
             else
-              _buildNoImageContainer("No Image Provided"),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ---------- Helper Widget ----------
-  Widget _buildDetailRow(IconData icon, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: Colors.lightBlue),
-        const SizedBox(width: 10),
-        Expanded(
-          child: RichText(
-            text: TextSpan(
-              style: const TextStyle(fontSize: 16, color: Colors.black),
-              children: [
-                TextSpan(
-                  text: "$label: ",
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+              Container(
+                width: double.infinity,
+                height: 200,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                TextSpan(text: value),
+                child: const Icon(Icons.image_not_supported,
+                    size: 80, color: Colors.grey),
+              ),
+            const SizedBox(height: 20),
+
+            // ✅ Item Name
+            Text(
+              itemData['itemName'] ?? "Unknown Item",
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // ✅ Type
+            Row(
+              children: [
+                const Icon(Icons.category, color: Colors.blue),
+                const SizedBox(width: 8),
+                Text(
+                  itemData['type'] ?? "Unknown Type",
+                  style: const TextStyle(fontSize: 16),
+                ),
               ],
             ),
-          ),
-        ),
-      ],
-    );
-  }
+            const SizedBox(height: 12),
 
-  Widget _buildNoImageContainer(String message) {
-    return Container(
-      height: 220,
-      decoration: BoxDecoration(
-        color: Colors.lightBlue[50],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Center(
-        child: Text(
-          message,
-          style: const TextStyle(color: Colors.black54),
+            // ✅ Availability
+            if (itemData['available'] != null)
+              Row(
+                children: [
+                  const Icon(Icons.inventory, color: Colors.green),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Available: ${itemData['available']}",
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 12),
+
+            // ✅ Expiry Date
+            if (itemData['expiryDate'] != null)
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today, color: Colors.redAccent),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Expiry Date: ${itemData['expiryDate']}",
+                    style: const TextStyle(fontSize: 16, color: Colors.red),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 20),
+
+            const Divider(),
+
+            // ✅ Donor Info Section
+            const Text(
+              "Donor Information",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+
+            if (itemData['donorName'] != null)
+              Row(
+                children: [
+                  const Icon(Icons.person, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Text("Name: ${itemData['donorName']}"),
+                ],
+              ),
+            const SizedBox(height: 8),
+
+            if (itemData['donorEmail'] != null)
+              Row(
+                children: [
+                  const Icon(Icons.email, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Text("Email: ${itemData['donorEmail']}"),
+                ],
+              ),
+            const SizedBox(height: 8),
+
+            if (itemData['donorPhone'] != null)
+              Row(
+                children: [
+                  const Icon(Icons.phone, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Text("Phone: ${itemData['donorPhone']}"),
+                ],
+              ),
+            const SizedBox(height: 20),
+
+            // ✅ Notes or Description
+            if (itemData['description'] != null &&
+                itemData['description'].toString().isNotEmpty)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Description",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    itemData['description'],
+                    style: const TextStyle(fontSize: 15),
+                  ),
+                ],
+              ),
+
+            const SizedBox(height: 40),
+          ],
         ),
       ),
     );

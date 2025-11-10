@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'donor_detail_page.dart'; // 👈 import this new detail page
+import 'donation_detail_screen.dart';
 
 class ReceiverPage extends StatefulWidget {
   const ReceiverPage({super.key});
@@ -33,21 +33,20 @@ class _ReceiverPageState extends State<ReceiverPage>
     _userUid = user.uid;
     _userEmail = user.email ?? "";
 
-    final doc =
-    await FirebaseFirestore.instance.collection("users").doc(user.uid).get();
+    final doc = await FirebaseFirestore.instance.collection("users").doc(user.uid).get();
 
-    if (doc.exists) {
+    if (doc.exists && doc.data() != null) {
+      final data = doc.data()!;
       setState(() {
-        _userName = doc['name'] ?? "";
-        _userPhone = doc['phone'] ?? "";
+        _userName = data['name'] ?? "";
+        _userPhone = data['phone'] ?? "";
       });
     }
   }
 
-  // ✅ Send request to Firestore
   Future<void> _requestItem(DocumentSnapshot item) async {
     try {
-      final data = item.data() as Map<String, dynamic>;
+      final data = item.data() as Map<String, dynamic>? ?? {};
 
       await FirebaseFirestore.instance.collection("requests").add({
         "receiverUid": _userUid,
@@ -75,29 +74,37 @@ class _ReceiverPageState extends State<ReceiverPage>
     }
   }
 
-  // ✅ Card UI
   Widget _buildItemCard(DocumentSnapshot item) {
-    final data = item.data() as Map<String, dynamic>;
+    final data = item.data() as Map<String, dynamic>? ?? {};
 
     return Card(
       elevation: 3,
       margin: const EdgeInsets.symmetric(vertical: 10),
       child: ListTile(
         contentPadding: const EdgeInsets.all(12),
-        leading: data['imageUrl'] != null && data['imageUrl'] != ""
-            ? Image.network(data['imageUrl'],
-            width: 70, height: 70, fit: BoxFit.cover)
-            : const Icon(Icons.image, size: 50),
+        leading: (data['imageUrl'] != null && data['imageUrl'] != "")
+            ? ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(
+            data['imageUrl'],
+            width: 70,
+            height: 70,
+            fit: BoxFit.cover,
+          ),
+        )
+            : const Icon(Icons.image, size: 50, color: Colors.grey),
         title: Text(
-          data['itemName'] ?? "",
+          data['itemName'] ?? "Unnamed Item",
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (data['expiryDate'] != null)
-              Text("Expiry: ${data['expiryDate']}",
-                  style: const TextStyle(color: Colors.red)),
+              Text(
+                "Expiry: ${data['expiryDate']}",
+                style: const TextStyle(color: Colors.red),
+              ),
             if (data['available'] != null)
               Text("Available: ${data['available']}"),
           ],
@@ -110,7 +117,7 @@ class _ReceiverPageState extends State<ReceiverPage>
               .where("status", isEqualTo: "Pending")
               .get(),
           builder: (context, snapshot) {
-            bool alreadyRequested =
+            final alreadyRequested =
                 snapshot.hasData && snapshot.data!.docs.isNotEmpty;
 
             return ElevatedButton(
@@ -124,7 +131,6 @@ class _ReceiverPageState extends State<ReceiverPage>
           },
         ),
         onTap: () {
-          // 👇 Navigate to detail screen on click
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -136,18 +142,18 @@ class _ReceiverPageState extends State<ReceiverPage>
     );
   }
 
-  // ✅ Medicines tab
   Widget _medicinesTab() {
-    return StreamBuilder(
+    return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection("donations")
           .where("type", isEqualTo: "Medicine")
+          .where("donorUid", isNotEqualTo: _userUid) // hide your own
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        final docs = snapshot.data!.docs;
+        final docs = snapshot.data?.docs ?? [];
         if (docs.isEmpty) {
           return const Center(child: Text("No medicines available"));
         }
@@ -161,18 +167,18 @@ class _ReceiverPageState extends State<ReceiverPage>
     );
   }
 
-  // ✅ Equipment tab
   Widget _equipmentTab() {
-    return StreamBuilder(
+    return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection("donations")
           .where("type", isEqualTo: "Equipment")
+          .where("donorUid", isNotEqualTo: _userUid) // hide your own
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        final docs = snapshot.data!.docs;
+        final docs = snapshot.data?.docs ?? [];
         if (docs.isEmpty) {
           return const Center(child: Text("No equipment available"));
         }

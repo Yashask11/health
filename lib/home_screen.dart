@@ -1,4 +1,3 @@
-// lib/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,8 +11,6 @@ import 'help_screen.dart';
 import 'login_screen.dart';
 import 'request_detail_screen.dart';
 import 'donation_detail_screen.dart';
-
-// ✅ NEW
 import 'notification_list_screen.dart';
 import 'models/notification_model.dart';
 
@@ -29,16 +26,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Request> requests = [];
   final List<Donation> donations = [];
-
-  // ✅ NEW
   final List<AppNotification> notifications = [];
 
   final CollectionReference donationsRef =
   FirebaseFirestore.instance.collection('donations');
   final CollectionReference requestsRef =
   FirebaseFirestore.instance.collection('requests');
-
-  // ✅ NEW
   final CollectionReference notificationsRef =
   FirebaseFirestore.instance.collection('notifications');
 
@@ -64,10 +57,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (user == null) return;
 
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+      final doc =
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
 
       if (doc.exists && doc.data() != null) {
         final data = doc.data() as Map<String, dynamic>;
@@ -79,52 +70,35 @@ class _HomeScreenState extends State<HomeScreen> {
 
       _listenToUserDonations();
       _listenToUserRequests();
-
-      // ✅ NEW
       _listenToNotifications();
-
     } catch (e, st) {
       debugPrint('Error loading user details: $e\n$st');
-
       _listenToUserDonations();
       _listenToUserRequests();
-
-      // ✅ NEW
       _listenToNotifications();
     }
   }
 
-  // ✅ LISTEN TO NOTIFICATIONS
   void _listenToNotifications() {
     final user = currentUser;
     if (user == null) return;
 
     notificationsRef
-        .where('donorUid', isEqualTo: user.uid)
+        .where('userUid', isEqualTo: user.uid)
         .orderBy('timestamp', descending: true)
         .snapshots()
         .listen((snapshot) {
-      try {
-        final List<AppNotification> loaded = snapshot.docs.map((doc) {
-          final data = doc.data();
+      final loaded = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return AppNotification.fromMap(doc.id, data);
+      }).toList();
 
-          if (data is! Map<String, dynamic>) {
-            debugPrint("Skipping invalid notification doc: ${doc.id}");
-            return null;
-          }
-
-          return AppNotification.fromMap(data, doc.id);
-        }).whereType<AppNotification>().toList();
-
-        setState(() {
-          notifications
-            ..clear()
-            ..addAll(loaded);
-        });
-      } catch (e, st) {
-        debugPrint("Notification listener error: $e\n$st");
-      }
-    });
+      setState(() {
+        notifications
+          ..clear()
+          ..addAll(loaded);
+      });
+    }, onError: (e) => debugPrint("Notification listener error: $e"));
   }
 
   void _listenToUserDonations() {
@@ -132,24 +106,21 @@ class _HomeScreenState extends State<HomeScreen> {
     if (user == null) return;
 
     donationsRef
-        .where('donorUid', isEqualTo: user.uid)
+        .where('status', isEqualTo: 'available')
+        .where('donorUid', isNotEqualTo: user.uid)
         .orderBy('timestamp', descending: true)
         .snapshots()
         .listen((snapshot) {
-      try {
-        final List<Donation> loaded = snapshot.docs.map((doc) {
-          final data = (doc.data() as Map<String, dynamic>?) ?? {};
-          return Donation.fromMap(data);
-        }).toList();
+      final loaded = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return Donation.fromMap(doc.id, data);
+      }).toList();
 
-        setState(() {
-          donations
-            ..clear()
-            ..addAll(loaded);
-        });
-      } catch (e, st) {
-        debugPrint('Error parsing donations snapshot: $e\n$st');
-      }
+      setState(() {
+        donations
+          ..clear()
+          ..addAll(loaded);
+      });
     }, onError: (err) => debugPrint('Donations snapshot error: $err'));
   }
 
@@ -162,20 +133,16 @@ class _HomeScreenState extends State<HomeScreen> {
         .orderBy('timestamp', descending: true)
         .snapshots()
         .listen((snapshot) {
-      try {
-        final List<Request> loaded = snapshot.docs.map((doc) {
-          final data = (doc.data() as Map<String, dynamic>?) ?? {};
-          return Request.fromMap(data, id: doc.id);
-        }).toList();
+      final loaded = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return Request.fromMap(doc.id, data);
+      }).toList();
 
-        setState(() {
-          requests
-            ..clear()
-            ..addAll(loaded);
-        });
-      } catch (e, st) {
-        debugPrint('Error parsing requests snapshot: $e\n$st');
-      }
+      setState(() {
+        requests
+          ..clear()
+          ..addAll(loaded);
+      });
     }, onError: (err) => debugPrint('Requests snapshot error: $err'));
   }
 
@@ -193,13 +160,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ✅ NEW
   void _openNotificationsPage() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => NotificationListScreen(notifications: notifications),
-      ),
+      MaterialPageRoute(builder: (_) => const NotificationListScreen()),
     );
   }
 
@@ -291,7 +255,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       context,
                       MaterialPageRoute(
                         builder: (_) =>
-                            DonationDetailScreen(donation: item),
+                            DonationDetailPage(itemData:item.toMap()),
                       ),
                     );
                   } else if (item is Request) {
@@ -312,46 +276,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openDonationsPage() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text("My Donations")),
-          body: _buildSection<Donation>(
-            title: "My Donations",
-            items: donations,
-            emptyText: "No donations yet",
-            icon: Icons.volunteer_activism,
-            iconColor: Colors.orange,
-            itemText: (d) =>
-            "${d.itemName} (x${d.quantity}) • ${d.donorName} • ${d.donorPhone}",
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _openRequestsPage() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text("My Requests")),
-          body: _buildSection<Request>(
-            title: "My Requests",
-            items: requests,
-            emptyText: "No requests yet",
-            icon: Icons.inventory,
-            iconColor: Colors.green,
-            itemText: (r) =>
-            "${r.itemName} • ${r.status} • ${r.receiverName} (${r.receiverPhone})",
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final userEmailLocal = currentUser?.email ?? userEmail;
@@ -369,21 +293,18 @@ class _HomeScreenState extends State<HomeScreen> {
               accountEmail: Text(userEmailLocal),
               currentAccountPicture: const CircleAvatar(
                 backgroundColor: Colors.white,
-                child:
-                Icon(Icons.person, size: 40, color: Colors.blueAccent),
+                child: Icon(Icons.person, size: 40, color: Colors.blueAccent),
               ),
               decoration: const BoxDecoration(color: Colors.blueAccent),
             ),
-
             ListTile(
-              leading: const Icon(Icons.notifications),   // ✅ NEW
+              leading: const Icon(Icons.notifications),
               title: const Text("Notifications"),
               onTap: () {
                 Navigator.pop(context);
                 _openNotificationsPage();
               },
             ),
-
             ListTile(
               leading: const Icon(Icons.person),
               title: const Text("Profile"),
@@ -417,7 +338,15 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text("My Donations"),
               onTap: () {
                 Navigator.pop(context);
-                _openDonationsPage();
+                _buildSection(
+                  title: "My Donations",
+                  items: donations,
+                  emptyText: "No donations yet",
+                  icon: Icons.volunteer_activism,
+                  iconColor: Colors.orange,
+                  itemText: (d) =>
+                  "${(d as Donation).itemName} (x${d.quantity}) • ${d.donorName}",
+                );
               },
             ),
             ListTile(
@@ -425,14 +354,22 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text("My Requests"),
               onTap: () {
                 Navigator.pop(context);
-                _openRequestsPage();
+                _buildSection(
+                  title: "My Requests",
+                  items: requests,
+                  emptyText: "No requests yet",
+                  icon: Icons.inventory,
+                  iconColor: Colors.green,
+                  itemText: (r) =>
+                  "${(r as Request).itemName} • ${r.status} • ${r.receiverName}",
+                );
               },
             ),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text("Sign Out",
-                  style: TextStyle(color: Colors.red)),
+              title:
+              const Text("Sign Out", style: TextStyle(color: Colors.red)),
               onTap: () async {
                 await FirebaseAuth.instance.signOut();
                 Navigator.pushReplacement(
@@ -452,17 +389,16 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             children: [
               _buildBigButton("Donor", "assets/donor.png", _openDonor),
-              _buildBigButton(
-                  "Receiver", "assets/receiver.png", _openReceiver),
+              _buildBigButton("Receiver", "assets/receiver.png", _openReceiver),
               const SizedBox(height: 20),
               _buildSection<Donation>(
-                title: "My Donations",
+                title: "Available Donations",
                 items: donations,
-                emptyText: "No donations yet",
+                emptyText: "No available donations",
                 icon: Icons.volunteer_activism,
                 iconColor: Colors.orange,
                 itemText: (d) =>
-                "${d.itemName} (x${d.quantity}) • ${d.donorName} • ${d.donorPhone}",
+                "${d.itemName} (x${d.quantity}) • ${d.donorName}",
               ),
               const SizedBox(height: 20),
               _buildSection<Request>(
@@ -472,7 +408,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icons.inventory,
                 iconColor: Colors.green,
                 itemText: (r) =>
-                "${r.itemName} • ${r.status} • ${r.receiverName} (${r.receiverPhone})",
+                "${r.itemName} • ${r.status} • ${r.receiverName}",
               ),
             ],
           ),
