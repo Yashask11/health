@@ -5,66 +5,61 @@ const { getMessaging } = require("firebase-admin/messaging");
 
 initializeApp();
 
-// Trigger when a new request document is created in Firestore
 exports.notifyDonorOnRequest = onDocumentCreated("requests/{requestId}", async (event) => {
-  const requestData = event.data.data();
+  console.log("Trigger fired for requests collection", { params: event.params });
+  const requestData = event.data?.data();
   const requestId = event.params.requestId;
 
-  const donorId = requestData.donorId;
+  console.log("Request data:", requestData);
+
+  if (!requestData) {
+    console.error("No request data available. Exiting.");
+    return null;
+  }
+
+  // MATCH the field name your Flutter app writes:
+  const donorId = requestData.donorUid; // <-- changed from donorId
+
   if (!donorId) {
-    console.log("No donorId in request.");
+    console.log("❌ No donorUid in request.");
     return null;
   }
 
   const db = getFirestore();
-
-  // ✅ Get donor details
   const donorDoc = await db.collection("users").doc(donorId).get();
   const donorData = donorDoc.data();
   const fcmToken = donorData?.fcmToken;
 
-  if (!fcmToken) {
-    console.log("⚠ No FCM token found for donor:", donorId);
-  }
+  const messageText = `${requestData.receiverName} requested your donation: ${requestData.itemName}`;
 
-  // Create notification message
-  const messageText = ${requestData.receiverName} requested your donation: ${requestData.itemName};
+  await db.collection("notifications").add({
+    title: "New Donation Request",
+    message: messageText,
+    timestamp: FieldValue.serverTimestamp(),
+    donorUid: donorId,
+    receiverUid: requestData.receiverUid ?? "",
+    requestId: requestId,
+  });
 
-  // ✅ Store the notification in Firestore (UPDATED)
-  try {
-    await db.collection("notifications").add({
-      title: "New Donation Request",                         // ✅ Added title
-      message: messageText,                                   // Already correct
-      timestamp: FieldValue.serverTimestamp(),               // Already correct
-      donorUid: donorId,                                      // Already correct
-      receiverUid: requestData.receiverUid ?? "",            // ✅ Added receiverUid
-      requestId: requestId                                    // Already correct
-    });
+  console.log("✅ Notification stored for donor:", donorId);
 
-    console.log("✅ Notification stored for donor:", donorId);
-  } catch (err) {
-    console.error("❌ Error storing notification:", err);
-  }
-
-  // ✅ Send push notification
   if (fcmToken) {
     const payload = {
       notification: {
-        title: "New Donation Request",   // ✅ Updated title to match Firestore
+        title: "New Donation Request",
         body: messageText,
       },
-      data: {
-        donorId: donorId,
-        requestId: requestId,
-      },
+      data: { donorId, requestId },
     };
 
     try {
-      await getMessaging().sendToDevice(fcmToken, payload);
-      console.log("📩 Push notification sent to donor:", donorId);
+      const res = await getMessaging().sendToDevice(fcmToken, payload);
+      console.log("📩 Push result:", res);
     } catch (error) {
       console.error("❌ Error sending FCM notification:", error);
     }
+  } else {
+    console.warn("⚠ No FCM token found for donor:", donorId);
   }
 
   return null;
