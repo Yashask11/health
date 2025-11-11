@@ -103,6 +103,15 @@ class _DonorFormPageState extends State<DonorForm> {
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // ✅ New check: ensure image is uploaded
+    if (_imageFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("⚠ Please upload an image before submitting."),
+        backgroundColor: Colors.orangeAccent,
+      ));
+      return;
+    }
+
     if (_donationType == "Medicine") {
       if (_expiryDateController.text.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -183,7 +192,7 @@ class _DonorFormPageState extends State<DonorForm> {
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
-            icon: const Icon(Icons.notifications, color: Colors.white), // ✅ Added notifications icon
+            icon: const Icon(Icons.notifications, color: Colors.white),
             onPressed: () {
               Navigator.push(
                 context,

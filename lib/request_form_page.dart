@@ -33,7 +33,8 @@ class _ReceiverPageState extends State<ReceiverPage>
     _userUid = user.uid;
     _userEmail = user.email ?? "";
 
-    final doc = await FirebaseFirestore.instance.collection("users").doc(user.uid).get();
+    final doc =
+    await FirebaseFirestore.instance.collection("users").doc(user.uid).get();
 
     if (doc.exists && doc.data() != null) {
       final data = doc.data()!;
@@ -67,9 +68,36 @@ class _ReceiverPageState extends State<ReceiverPage>
           backgroundColor: Colors.green,
         ),
       );
+
+      setState(() {}); // refresh UI after sending
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _cancelRequest(String requestId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection("requests")
+          .doc(requestId)
+          .delete();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("❌ Request cancelled successfully."),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+
+      setState(() {}); // refresh UI after cancel
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error cancelling request: $e"),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -117,16 +145,50 @@ class _ReceiverPageState extends State<ReceiverPage>
               .where("status", isEqualTo: "Pending")
               .get(),
           builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const SizedBox(
+                height: 25,
+                width: 25,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              );
+            }
+
             final alreadyRequested =
                 snapshot.hasData && snapshot.data!.docs.isNotEmpty;
 
+            if (alreadyRequested) {
+              final requestId = snapshot.data!.docs.first.id;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Pending",
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  ElevatedButton(
+                    onPressed: () => _cancelRequest(requestId),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      minimumSize: const Size(60, 30),
+                    ),
+                    child: const Text("Cancel"),
+                  ),
+                ],
+              );
+            }
+
             return ElevatedButton(
-              onPressed: alreadyRequested ? null : () => _requestItem(item),
+              onPressed: () => _requestItem(item),
               style: ElevatedButton.styleFrom(
-                backgroundColor:
-                alreadyRequested ? Colors.grey : Colors.lightBlue,
+                backgroundColor: Colors.lightBlue,
               ),
-              child: Text(alreadyRequested ? "Pending" : "Request"),
+              child: const Text("Request"),
             );
           },
         ),
@@ -147,7 +209,7 @@ class _ReceiverPageState extends State<ReceiverPage>
       stream: FirebaseFirestore.instance
           .collection("donations")
           .where("type", isEqualTo: "Medicine")
-          .where("donorUid", isNotEqualTo: _userUid) // hide your own
+          .where("donorUid", isNotEqualTo: _userUid)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -172,7 +234,7 @@ class _ReceiverPageState extends State<ReceiverPage>
       stream: FirebaseFirestore.instance
           .collection("donations")
           .where("type", isEqualTo: "Equipment")
-          .where("donorUid", isNotEqualTo: _userUid) // hide your own
+          .where("donorUid", isNotEqualTo: _userUid)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
