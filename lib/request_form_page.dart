@@ -45,21 +45,20 @@ class _ReceiverPageState extends State<ReceiverPage>
     }
   }
 
-  Future<void> _requestItem(DocumentSnapshot item) async {
+  Future<void> _requestItem(Map<String, dynamic> donorData) async {
     try {
-      final data = item.data() as Map<String, dynamic>? ?? {};
-
       await FirebaseFirestore.instance.collection("requests").add({
         "receiverUid": _userUid,
         "receiverName": _userName,
         "receiverEmail": _userEmail,
         "receiverPhone": _userPhone,
-        "donorUid": data['donorUid'],
-        "itemName": data['itemName'],
-        "type": data['type'],
+        "donorUid": donorData['donorUid'],
+        "itemName": donorData['itemName'],
+        "expiryDate": donorData['expiryDate'],
+        "type": donorData['type'],
         "timestamp": FieldValue.serverTimestamp(),
         "status": "Pending",
-        "imageUrl": data['imageUrl'],
+        "imageUrl": donorData['imageUrl'],
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -102,19 +101,22 @@ class _ReceiverPageState extends State<ReceiverPage>
     }
   }
 
-  Widget _buildItemCard(DocumentSnapshot item) {
-    final data = item.data() as Map<String, dynamic>? ?? {};
+  Widget _buildGroupedItemCard(
+      String groupKey, List<Map<String, dynamic>> donors, String type) {
+    final firstItem = donors.first;
+    final nameParts = groupKey.split("||");
+    final itemName = nameParts[0];
+    final expiryDate = nameParts.length > 1 ? nameParts[1] : "";
 
     return Card(
       elevation: 3,
       margin: const EdgeInsets.symmetric(vertical: 10),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(12),
-        leading: (data['imageUrl'] != null && data['imageUrl'] != "")
+      child: ExpansionTile(
+        leading: (firstItem['imageUrl'] != null && firstItem['imageUrl'] != "")
             ? ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: Image.network(
-            data['imageUrl'],
+            firstItem['imageUrl'],
             width: 70,
             height: 70,
             fit: BoxFit.cover,
@@ -122,89 +124,119 @@ class _ReceiverPageState extends State<ReceiverPage>
         )
             : const Icon(Icons.image, size: 50, color: Colors.grey),
         title: Text(
-          data['itemName'] ?? "Unnamed Item",
+          itemName,
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        subtitle: Flexible( // ✅ Prevent overflow
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (data['expiryDate'] != null)
-                Text(
-                  "Expiry: ${data['expiryDate']}",
-                  style: const TextStyle(color: Colors.red),
-                ),
-              if (data['available'] != null)
-                Text("Available: ${data['available']}"),
-            ],
-          ),
+        subtitle: Text(
+          expiryDate.isNotEmpty
+              ? "Expiry: $expiryDate • ${donors.length} donor(s)"
+              : "${donors.length} donor(s)",
+          style: const TextStyle(color: Colors.grey),
         ),
-        trailing: FutureBuilder<QuerySnapshot>(
-          future: FirebaseFirestore.instance
-              .collection("requests")
-              .where("receiverUid", isEqualTo: _userUid)
-              .where("itemName", isEqualTo: data['itemName'])
-              .where("status", isEqualTo: "Pending")
-              .get(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const SizedBox(
-                height: 25,
-                width: 25,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              );
-            }
-
-            final alreadyRequested =
-                snapshot.hasData && snapshot.data!.docs.isNotEmpty;
-
-            if (alreadyRequested) {
-              final requestId = snapshot.data!.docs.first.id;
-              return SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    "Pending",
-                    style: TextStyle(
-                      color: Colors.grey,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  ElevatedButton(
-                    onPressed: () => _cancelRequest(requestId),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                      padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      minimumSize: const Size(60, 30),
-                    ),
-                    child: const Text("Cancel"),
-                  ),
-                ],
-              ),
-              );
-            }
-
-            return ElevatedButton(
-              onPressed: () => _requestItem(item),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.lightBlue,
-              ),
-              child: const Text("Request"),
-            );
-          },
-        ),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DonationDetailPage(itemData: data),
+        children: donors.map((donor) {
+          return ListTile(
+            title: Text("Donor: ${donor['donorName'] ?? 'Unknown'}"),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (donor['available'] != null)
+                  Text("Available: ${donor['available']}"),
+              ],
             ),
+            trailing: FutureBuilder<QuerySnapshot>(
+              future: FirebaseFirestore.instance
+                  .collection("requests")
+                  .where("receiverUid", isEqualTo: _userUid)
+                  .where("itemName", isEqualTo: donor['itemName'])
+                  .where("expiryDate", isEqualTo: donor['expiryDate'])
+                  .where("donorUid", isEqualTo: donor['donorUid'])
+                  .where("status", isEqualTo: "Pending")
+                  .get(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(
+                    height: 25,
+                    width: 25,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  );
+                }
+
+                final alreadyRequested =
+                    snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+
+                if (alreadyRequested) {
+                  final requestId = snapshot.data!.docs.first.id;
+                  // ✅ FIX: Wrapped Column in FittedBox to prevent RenderFlex overflow
+                  return FittedBox(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          "Pending",
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        ElevatedButton(
+                          onPressed: () => _cancelRequest(requestId),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            minimumSize: const Size(60, 30),
+                          ),
+                          child: const Text("Cancel"),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ElevatedButton(
+                  onPressed: () => _requestItem(donor),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.lightBlue,
+                  ),
+                  child: const Text("Request"),
+                );
+              },
+            ),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => DonationDetailPage(itemData: donor),
+                ),
+              );
+            },
           );
-        },
+        }).toList(),
       ),
+    );
+  }
+
+  Widget _buildGroupedList(QuerySnapshot snapshot, String type) {
+    final docs = snapshot.docs;
+    if (docs.isEmpty) {
+      return Center(child: Text("No $type available"));
+    }
+
+    final Map<String, List<Map<String, dynamic>>> grouped = {};
+    for (var doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final name = data['itemName'] ?? "Unnamed Item";
+      final expiry = data['expiryDate'] ?? "No Expiry";
+      final key = "$name||$expiry";
+      grouped.putIfAbsent(key, () => []).add(data);
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(15),
+      children: grouped.entries
+          .map((entry) => _buildGroupedItemCard(entry.key, entry.value, type))
+          .toList(),
     );
   }
 
@@ -219,16 +251,7 @@ class _ReceiverPageState extends State<ReceiverPage>
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        final docs = snapshot.data?.docs ?? [];
-        if (docs.isEmpty) {
-          return const Center(child: Text("No medicines available"));
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(15),
-          itemCount: docs.length,
-          itemBuilder: (context, i) => _buildItemCard(docs[i]),
-        );
+        return _buildGroupedList(snapshot.data!, "medicines");
       },
     );
   }
@@ -244,16 +267,7 @@ class _ReceiverPageState extends State<ReceiverPage>
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        final docs = snapshot.data?.docs ?? [];
-        if (docs.isEmpty) {
-          return const Center(child: Text("No equipment available"));
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(15),
-          itemCount: docs.length,
-          itemBuilder: (context, i) => _buildItemCard(docs[i]),
-        );
+        return _buildGroupedList(snapshot.data!, "equipment");
       },
     );
   }

@@ -51,6 +51,12 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       userName = "Guest";
       userPhone = "N/A";
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+      });
     }
   }
 
@@ -114,7 +120,12 @@ class _HomeScreenState extends State<HomeScreen> {
     if (user == null) return;
 
     notificationsRef
-        .where('userUid', isEqualTo: user.uid)
+        .where(
+      Filter.or(
+        Filter('donorUid', isEqualTo: user.uid),
+        Filter('receiverUid', isEqualTo: user.uid),
+      ),
+    )
         .orderBy('timestamp', descending: true)
         .snapshots()
         .listen((snapshot) {
@@ -196,7 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// ✅ NEW: Delete Account and all related data
+  /// ✅ FIXED DELETE ACCOUNT with Reauthentication
   Future<void> _deleteAccount() async {
     final user = currentUser;
     if (user == null) return;
@@ -206,8 +217,10 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text("Delete Account"),
         content: const Text(
-            "Are you sure you want to permanently delete your account?\n\n"
-                "This will remove all your donations, requests, and notifications. This action cannot be undone."),
+          "Are you sure you want to permanently delete your account?\n\n"
+              "This will remove all your donations, requests, and notifications. "
+              "This action cannot be undone.",
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
           ElevatedButton(
@@ -225,36 +238,57 @@ class _HomeScreenState extends State<HomeScreen> {
       final uid = user.uid;
       final firestore = FirebaseFirestore.instance;
 
-      // Delete user donations
-      final donationsSnap =
-      await firestore.collection('donations').where('donorUid', isEqualTo: uid).get();
-      for (var d in donationsSnap.docs) {
-        await d.reference.delete();
+      // Delete user data
+      for (final c in ['donations', 'requests', 'notifications']) {
+        final query = await firestore
+            .collection(c)
+            .where(Filter.or(
+          Filter('donorUid', isEqualTo: uid),
+          Filter('receiverUid', isEqualTo: uid),
+        ))
+            .get();
+        for (var d in query.docs) {
+          await d.reference.delete();
+        }
       }
 
-      // Delete user requests
-      final requestsSnap =
-      await firestore.collection('requests').where('receiverUid', isEqualTo: uid).get();
-      for (var r in requestsSnap.docs) {
-        await r.reference.delete();
-      }
-
-      // Delete notifications
-      final notifSnap =
-      await firestore.collection('notifications').where('userUid', isEqualTo: uid).get();
-      for (var n in notifSnap.docs) {
-        await n.reference.delete();
-      }
-
-      // Delete user document
       await firestore.collection('users').doc(uid).delete();
 
-      // Delete Firebase Auth account
-      await user.delete();
+      // 🔒 Reauthenticate before deleting the Auth account
+      try {
+        final password = await _askPassword(context);
+        final cred = EmailAuthProvider.credential(
+          email: user.email!,
+          password: password,
+        );
+        await user.reauthenticateWithCredential(cred);
+        await user.delete();
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'requires-recent-login') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please log in again to confirm deletion.")),
+          );
+          await FirebaseAuth.instance.signOut();
+          if (mounted) {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false,
+            );
+          }
+          return;
+        } else {
+          rethrow;
+        }
+      }
+
+      await FirebaseAuth.instance.signOut();
 
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text("Account deleted successfully.")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Account deleted successfully.")),
+        );
+
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -263,9 +297,38 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       debugPrint("❌ Error deleting account: $e");
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Error deleting account: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error deleting account: $e")),
+      );
     }
+  }
+
+  Future<String> _askPassword(BuildContext context) async {
+    String password = '';
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Confirm Password'),
+          content: TextField(
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'Enter your password'),
+            onChanged: (val) => password = val,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Confirm'),
+            ),
+          ],
+        );
+      },
+    );
+    return password;
   }
 
   Widget _buildImage(String? imageUrl) {
@@ -279,7 +342,7 @@ class _HomeScreenState extends State<HomeScreen> {
         fit: BoxFit.cover,
         height: 60,
         width: 60,
-        errorBuilder: (context, error, stackTrace) =>
+        errorBuilder: (_, __, ___) =>
         const Icon(Icons.broken_image, size: 60, color: Colors.grey),
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
@@ -350,14 +413,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (_) =>
-                              DonationDetailPage(itemData: item.toMap())),
+                        builder: (_) =>
+                            DonationDetailPage(itemData: item.toMap()),
+                      ),
                     );
                   } else if (item is Request) {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (_) => RequestDetailScreen(request: item)),
+                        builder: (_) => RequestDetailScreen(request: item),
+                      ),
                     );
                   }
                 },
@@ -407,8 +472,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        ProfileScreen(name: userName, email: userEmailLocal, phone: userPhone),
+                    builder: (_) => ProfileScreen(
+                      name: userName,
+                      email: userEmailLocal,
+                      phone: userPhone,
+                    ),
                   ),
                 );
               },
@@ -425,7 +493,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const Divider(),
             ListTile(
               leading: const Icon(Icons.delete_forever, color: Colors.red),
-              title: const Text("Delete Account", style: TextStyle(color: Colors.red)),
+              title:
+              const Text("Delete Account", style: TextStyle(color: Colors.red)),
               onTap: _deleteAccount,
             ),
             ListTile(
@@ -433,9 +502,11 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text("Sign Out", style: TextStyle(color: Colors.red)),
               onTap: () async {
                 await FirebaseAuth.instance.signOut();
-                Navigator.pushReplacement(
+                if (!mounted) return;
+                Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      (route) => false,
                 );
               },
             ),
@@ -458,14 +529,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _buildBigButton("Receiver", "assets/receiver.png", _openReceiver),
+                    child: _buildBigButton(
+                        "Receiver", "assets/receiver.png", _openReceiver),
                   ),
                 ],
               ),
               const SizedBox(height: 24),
               Card(
                 elevation: 6,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: _buildSection<Donation>(
@@ -474,14 +547,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     emptyText: "No donations yet",
                     icon: Icons.volunteer_activism,
                     iconColor: Colors.orange,
-                    itemText: (d) => "${d.itemName} (x${d.quantity}) • ${d.donorName}",
+                    itemText: (d) =>
+                    "${d.itemName} (x${d.quantity}) • ${d.donorName}",
                   ),
                 ),
               ),
               const SizedBox(height: 20),
               Card(
                 elevation: 6,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: _buildSection<Request>(
