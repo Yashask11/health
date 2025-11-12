@@ -18,12 +18,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   String? _userRole;
   String? _currentUid;
+  int _unreadCount = 0; // ✅ Track unread notifications
 
   @override
   void initState() {
     super.initState();
     _initNotifications();
     _fetchUserRole();
+    _listenForUnreadCount(); // ✅ Start listening for unread count
   }
 
   Future<void> _initNotifications() async {
@@ -79,10 +81,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     debugPrint("👤 Logged in UID: $_currentUid");
 
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(_currentUid)
-          .get();
+      final doc =
+      await FirebaseFirestore.instance.collection('users').doc(_currentUid).get();
 
       if (doc.exists) {
         setState(() {
@@ -97,6 +97,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
+  // ✅ Stream for fetching notifications
   Stream<QuerySnapshot> _getNotifications() {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
@@ -107,34 +108,89 @@ class _NotificationScreenState extends State<NotificationScreen> {
     final uid = currentUser.uid;
     debugPrint("📡 Fetching notifications for UID: $uid");
 
-    // 🔍 To verify if filtering is the issue, you can temporarily comment out the 'where' line.
     return FirebaseFirestore.instance
         .collection('notifications')
-        .where('toUid', isEqualTo: uid) // <- Ensure your Firestore docs have 'toUid'
+        .where('toUid', isEqualTo: uid)
         .orderBy('timestamp', descending: true)
         .snapshots();
   }
 
+  // ✅ Listen for unread notifications count in real time
+  void _listenForUnreadCount() {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    FirebaseFirestore.instance
+        .collection('notifications')
+        .where('toUid', isEqualTo: currentUser.uid)
+        .where('isRead', isEqualTo: false) // field should exist in your Firestore
+        .snapshots()
+        .listen((snapshot) {
+      setState(() {
+        _unreadCount = snapshot.docs.length;
+      });
+    });
+  }
+
+  // ✅ Mark all as read when opening screen
+  Future<void> _markAllAsRead() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+
+    final unreadDocs = await FirebaseFirestore.instance
+        .collection('notifications')
+        .where('toUid', isEqualTo: currentUser.uid)
+        .where('isRead', isEqualTo: false)
+        .get();
+
+    for (var doc in unreadDocs.docs) {
+      batch.update(doc.reference, {'isRead': true});
+    }
+
+    await batch.commit();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final roleText =
-    _userRole == null ? 'Loading...' : '(${_userRole!.toUpperCase()})';
-
     return Scaffold(
       appBar: AppBar(
-        title: Text('Notifications $roleText'),
+        title: Row(
+          children: [
+            const Text(
+              'Notifications',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(width: 8),
+            if (_unreadCount > 0)
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '$_unreadCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
         backgroundColor: const Color(0xFF87CEEB),
         foregroundColor: Colors.white,
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: _getNotifications(),
         builder: (context, snapshot) {
-          // --- Loading State ---
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // --- Error State ---
           if (snapshot.hasError) {
             debugPrint("❌ Firestore error: ${snapshot.error}");
             return Center(
@@ -142,7 +198,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
             );
           }
 
-          // --- No Data ---
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             debugPrint("📭 No notifications found for this user.");
             return const Center(
@@ -168,15 +223,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
               final time = notif['timestamp'] != null
                   ? (notif['timestamp'] as Timestamp).toDate()
                   : DateTime.now();
+              final isRead = notif['isRead'] ?? false;
 
               final formattedTime =
                   '${time.day}/${time.month}/${time.year} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
 
-              debugPrint("📨 Notification [$index]: $title — $message");
-
               return Card(
-                margin:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                color: isRead ? Colors.white : Colors.blue.shade50, // Unread highlight
                 child: ListTile(
                   leading: const Icon(Icons.notifications_active,
                       color: Colors.blue),
@@ -191,11 +245,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
                       const SizedBox(height: 4),
                       Text(
                         formattedTime,
-                        style: const TextStyle(
-                            fontSize: 12, color: Colors.grey),
+                        style:
+                        const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ],
                   ),
+                  onTap: () async {
+                    // Mark as read when tapped
+                    await FirebaseFirestore.instance
+                        .collection('notifications')
+                        .doc(notifications[index].id)
+                        .update({'isRead': true});
+                  },
                 ),
               );
             },
