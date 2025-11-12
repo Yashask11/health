@@ -16,7 +16,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
   final FlutterLocalNotificationsPlugin _localNotifications =
   FlutterLocalNotificationsPlugin();
 
-  String? _userRole; // "donor" or "receiver"
+  String? _userRole;
+  String? _currentUid;
 
   @override
   void initState() {
@@ -46,8 +47,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Future<void> _showNotification(RemoteMessage message) async {
-    const AndroidNotificationDetails androidDetails =
-    AndroidNotificationDetails(
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       'health_channel',
       'Health Notifications',
       importance: Importance.max,
@@ -70,35 +70,47 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   Future<void> _fetchUserRole() async {
     final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
+    if (currentUser == null) {
+      debugPrint("⚠ No user logged in.");
+      return;
+    }
+
+    _currentUid = currentUser.uid;
+    debugPrint("👤 Logged in UID: $_currentUid");
 
     try {
       final doc = await FirebaseFirestore.instance
           .collection('users')
-          .doc(currentUser.uid)
+          .doc(_currentUid)
           .get();
 
       if (doc.exists) {
         setState(() {
           _userRole = doc.data()?['role'] ?? 'receiver';
         });
-        debugPrint("👤 Logged in as $_userRole");
+        debugPrint("✅ User role fetched: $_userRole");
+      } else {
+        debugPrint("⚠ No user document found for UID $_currentUid");
       }
     } catch (e) {
-      debugPrint("⚠️ Error fetching user role: $e");
+      debugPrint("❌ Error fetching user role: $e");
     }
   }
 
   Stream<QuerySnapshot> _getNotifications() {
     final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return const Stream.empty();
+    if (currentUser == null) {
+      debugPrint("⚠ User not logged in — empty stream returned.");
+      return const Stream.empty();
+    }
 
-    // Universal: show all notifications where this user is the recipient
-    debugPrint("📡 Fetching notifications for UID: ${currentUser.uid}");
+    final uid = currentUser.uid;
+    debugPrint("📡 Fetching notifications for UID: $uid");
 
+    // 🔍 To verify if filtering is the issue, you can temporarily comment out the 'where' line.
     return FirebaseFirestore.instance
         .collection('notifications')
-        .where('toUid', isEqualTo: currentUser.uid)
+        .where('toUid', isEqualTo: uid) // <- Ensure your Firestore docs have 'toUid'
         .orderBy('timestamp', descending: true)
         .snapshots();
   }
@@ -117,17 +129,22 @@ class _NotificationScreenState extends State<NotificationScreen> {
       body: StreamBuilder<QuerySnapshot>(
         stream: _getNotifications(),
         builder: (context, snapshot) {
+          // --- Loading State ---
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
+          // --- Error State ---
           if (snapshot.hasError) {
+            debugPrint("❌ Firestore error: ${snapshot.error}");
             return Center(
               child: Text('Error loading notifications: ${snapshot.error}'),
             );
           }
 
+          // --- No Data ---
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            debugPrint("📭 No notifications found for this user.");
             return const Center(
               child: Text(
                 'No notifications yet.',
@@ -137,6 +154,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
           }
 
           final notifications = snapshot.data!.docs;
+          debugPrint("📬 Notifications count: ${notifications.length}");
 
           return ListView.builder(
             itemCount: notifications.length,
@@ -153,6 +171,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
               final formattedTime =
                   '${time.day}/${time.month}/${time.year} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+
+              debugPrint("📨 Notification [$index]: $title — $message");
 
               return Card(
                 margin:
