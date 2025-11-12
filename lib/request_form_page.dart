@@ -69,7 +69,7 @@ class _ReceiverPageState extends State<ReceiverPage>
         ),
       );
 
-      setState(() {}); // refresh UI after sending
+      setState(() {});
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
@@ -91,7 +91,7 @@ class _ReceiverPageState extends State<ReceiverPage>
         ),
       );
 
-      setState(() {}); // refresh UI after cancel
+      setState(() {});
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -125,17 +125,19 @@ class _ReceiverPageState extends State<ReceiverPage>
           data['itemName'] ?? "Unnamed Item",
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (data['expiryDate'] != null)
-              Text(
-                "Expiry: ${data['expiryDate']}",
-                style: const TextStyle(color: Colors.red),
-              ),
-            if (data['available'] != null)
-              Text("Available: ${data['available']}"),
-          ],
+        subtitle: Flexible( // ✅ Prevent overflow
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (data['expiryDate'] != null)
+                Text(
+                  "Expiry: ${data['expiryDate']}",
+                  style: const TextStyle(color: Colors.red),
+                ),
+              if (data['available'] != null)
+                Text("Available: ${data['available']}"),
+            ],
+          ),
         ),
         trailing: FutureBuilder<QuerySnapshot>(
           future: FirebaseFirestore.instance
@@ -158,7 +160,8 @@ class _ReceiverPageState extends State<ReceiverPage>
 
             if (alreadyRequested) {
               final requestId = snapshot.data!.docs.first.id;
-              return Column(
+              return SingleChildScrollView(
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
@@ -173,13 +176,14 @@ class _ReceiverPageState extends State<ReceiverPage>
                     onPressed: () => _cancelRequest(requestId),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.redAccent,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
+                      padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       minimumSize: const Size(60, 30),
                     ),
                     child: const Text("Cancel"),
                   ),
                 ],
+              ),
               );
             }
 

@@ -6,61 +6,45 @@ const { getMessaging } = require("firebase-admin/messaging");
 initializeApp();
 
 exports.notifyDonorOnRequest = onDocumentCreated("requests/{requestId}", async (event) => {
-  console.log("Trigger fired for requests collection", { params: event.params });
   const requestData = event.data?.data();
+  const donorId = requestData?.donorUid;
   const requestId = event.params.requestId;
 
-  console.log("Request data:", requestData);
-
-  if (!requestData) {
-    console.error("No request data available. Exiting.");
-    return null;
-  }
-
-  // MATCH the field name your Flutter app writes:
-  const donorId = requestData.donorUid; // <-- changed from donorId
-
   if (!donorId) {
-    console.log("❌ No donorUid in request.");
-    return null;
+    console.log("❌ No donorUid found in request");
+    return;
   }
 
   const db = getFirestore();
-  const donorDoc = await db.collection("users").doc(donorId).get();
-  const donorData = donorDoc.data();
+  const donorSnap = await db.collection("users").doc(donorId).get();
+  const donorData = donorSnap.data();
   const fcmToken = donorData?.fcmToken;
 
-  const messageText = `${requestData.receiverName} requested your donation: ${requestData.itemName}`;
+  const messageText = `You have a new donation request from ${requestData.receiverName || "a receiver"}`;
 
+  // 🔹 Create Firestore notification (this powers your NotificationScreen)
   await db.collection("notifications").add({
     title: "New Donation Request",
     message: messageText,
+    toUid: donorId,
     timestamp: FieldValue.serverTimestamp(),
-    donorUid: donorId,
-    receiverUid: requestData.receiverUid ?? "",
     requestId: requestId,
   });
 
-  console.log("✅ Notification stored for donor:", donorId);
-
+  // 🔹 Send FCM notification
   if (fcmToken) {
-    const payload = {
-      notification: {
-        title: "New Donation Request",
-        body: messageText,
-      },
-      data: { donorId, requestId },
-    };
-
     try {
-      const res = await getMessaging().sendToDevice(fcmToken, payload);
-      console.log("📩 Push result:", res);
+      const response = await getMessaging().sendToDevice(fcmToken, {
+        notification: {
+          title: "New Donation Request",
+          body: messageText,
+        },
+      });
+      console.log("✅ FCM notification sent:", response);
     } catch (error) {
-      console.error("❌ Error sending FCM notification:", error);
+      console.error("❌ Error sending FCM:", error);
     }
   } else {
-    console.warn("⚠ No FCM token found for donor:", donorId);
+    console.log("⚠ No FCM token found for donor:", donorId);
   }
-
-  return null;
 });

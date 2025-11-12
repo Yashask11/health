@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class DonationDetailPage extends StatelessWidget {
   final Map<String, dynamic> itemData;
@@ -7,6 +8,17 @@ class DonationDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ Convert Firestore Timestamp to readable date
+    String formatExpiryDate(dynamic value) {
+      if (value == null) return "N/A";
+      if (value is Timestamp) {
+        final date = value.toDate();
+        return "${date.day}/${date.month}/${date.year}";
+      } else {
+        return value.toString();
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(itemData['itemName'] ?? "Donation Details"),
@@ -17,7 +29,6 @@ class DonationDetailPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ✅ Image Section
             if (itemData['imageUrl'] != null && itemData['imageUrl'] != "")
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -41,7 +52,6 @@ class DonationDetailPage extends StatelessWidget {
               ),
             const SizedBox(height: 20),
 
-            // ✅ Item Name
             Text(
               itemData['itemName'] ?? "Unknown Item",
               style: const TextStyle(
@@ -51,7 +61,6 @@ class DonationDetailPage extends StatelessWidget {
             ),
             const SizedBox(height: 10),
 
-            // ✅ Type
             Row(
               children: [
                 const Icon(Icons.category, color: Colors.blue),
@@ -64,7 +73,6 @@ class DonationDetailPage extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // ✅ Availability
             if (itemData['available'] != null)
               Row(
                 children: [
@@ -78,14 +86,13 @@ class DonationDetailPage extends StatelessWidget {
               ),
             const SizedBox(height: 12),
 
-            // ✅ Expiry Date
             if (itemData['expiryDate'] != null)
               Row(
                 children: [
                   const Icon(Icons.calendar_today, color: Colors.redAccent),
                   const SizedBox(width: 8),
                   Text(
-                    "Expiry Date: ${itemData['expiryDate']}",
+                    "Expiry Date: ${formatExpiryDate(itemData['expiryDate'])}",
                     style: const TextStyle(fontSize: 16, color: Colors.red),
                   ),
                 ],
@@ -94,7 +101,6 @@ class DonationDetailPage extends StatelessWidget {
 
             const Divider(),
 
-            // ✅ Donor Info Section
             const Text(
               "Donor Information",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -131,7 +137,6 @@ class DonationDetailPage extends StatelessWidget {
               ),
             const SizedBox(height: 20),
 
-            // ✅ Notes or Description
             if (itemData['description'] != null &&
                 itemData['description'].toString().isNotEmpty)
               Column(
