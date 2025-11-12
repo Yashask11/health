@@ -41,8 +41,15 @@ flutter {
 }
 
 dependencies {
-    // ✅ Updated version to fix your build issue
+    // ✅ Enable new Java APIs (required by Firebase)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 
+    // ✅ Kotlin standard lib
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+
+    // ✅ Firebase Messaging (push notifications)
+    implementation("com.google.firebase:firebase-messaging:24.0.3")
+
+    // ✅ Local notifications plugin (used to show notifications when app is foregrounded)
+    implementation("androidx.core:core-ktx:1.12.0")
 }
