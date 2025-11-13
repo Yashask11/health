@@ -5,7 +5,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'notification_detail_screen.dart';
-import 'confirm_request_screen.dart';   // ⭐ NEW SCREEN IMPORT
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -14,24 +13,18 @@ class NotificationScreen extends StatefulWidget {
   State<NotificationScreen> createState() => _NotificationScreenState();
 }
 
-class _NotificationScreenState extends State<NotificationScreen>
-    with SingleTickerProviderStateMixin {
-
+class _NotificationScreenState extends State<NotificationScreen> {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
   FlutterLocalNotificationsPlugin();
 
-  int _unreadCountDonor = 0;
-  int _unreadCountReceiver = 0;
-
-  late TabController _tabController;
+  int _unreadCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _initNotifications();
-    _listenForUnreadCounts();
+    _listenForUnreadCount();
   }
 
   Future<void> _initNotifications() async {
@@ -46,55 +39,31 @@ class _NotificationScreenState extends State<NotificationScreen>
     await _localNotifications.initialize(initSettings);
   }
 
-  // ⭐ STREAM FOR DONOR NOTIFICATIONS
-  Stream<QuerySnapshot> _donorNotifications() {
-    final current = FirebaseAuth.instance.currentUser;
-    if (current == null) return const Stream.empty();
+  Stream<QuerySnapshot> _getNotifications() {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return const Stream.empty();
 
     return FirebaseFirestore.instance
         .collection('notifications')
-        .where('toUid', isEqualTo: current.uid)
+        .where('toUid', isEqualTo: currentUser.uid)
         .orderBy('timestamp', descending: true)
         .snapshots();
   }
 
-  // ⭐ STREAM FOR RECEIVER NOTIFICATIONS
-  Stream<QuerySnapshot> _receiverNotifications() {
-    final current = FirebaseAuth.instance.currentUser;
-    if (current == null) return const Stream.empty();
-
-    return FirebaseFirestore.instance
-        .collection('notifications')
-        .where('fromUid', isEqualTo: current.uid)
-        .orderBy('timestamp', descending: true)
-        .snapshots();
-  }
-
-  // ⭐ COUNT UNREAD FOR BOTH
-  void _listenForUnreadCounts() {
-    final current = FirebaseAuth.instance.currentUser;
-    if (current == null) return;
+  void _listenForUnreadCount() {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
 
     FirebaseFirestore.instance
         .collection('notifications')
-        .where('toUid', isEqualTo: current.uid)
+        .where('toUid', isEqualTo: currentUser.uid)
         .where('isRead', isEqualTo: false)
         .snapshots()
-        .listen((snap) {
-      setState(() => _unreadCountDonor = snap.docs.length);
-    });
-
-    FirebaseFirestore.instance
-        .collection('notifications')
-        .where('fromUid', isEqualTo: current.uid)
-        .where('isRead', isEqualTo: false)
-        .snapshots()
-        .listen((snap) {
-      setState(() => _unreadCountReceiver = snap.docs.length);
+        .listen((snapshot) {
+      setState(() => _unreadCount = snapshot.docs.length);
     });
   }
 
-  // ⭐ FETCH USER DETAILS
   Future<Map<String, String>> _getUserDetails(String uid) async {
     try {
       final doc =
@@ -123,134 +92,103 @@ class _NotificationScreenState extends State<NotificationScreen>
     }
   }
 
-  // ⭐ REUSABLE NOTIFICATION LIST
-  Widget _buildNotificationList(Stream<QuerySnapshot> stream) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: stream,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final notifs = snapshot.data!.docs;
-        if (notifs.isEmpty) {
-          return const Center(child: Text("No notifications yet."));
-        }
-
-        return ListView.builder(
-          itemCount: notifs.length,
-          itemBuilder: (context, index) {
-            final notif = notifs[index].data() as Map<String, dynamic>;
-
-            final title = notif['title'] ?? '';
-            final message = notif['message'] ?? '';
-            final requestId = notif['requestId'] ?? '';
-
-            final timestamp = notif['timestamp'] as Timestamp?;
-            final date = timestamp?.toDate() ?? DateTime.now();
-            final formattedTime =
-                "${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}";
-
-            final isRead = notif['isRead'] ?? false;
-
-            return Card(
-              color: isRead ? Colors.white : Colors.blue.shade50,
-              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: ListTile(
-                leading: const Icon(Icons.notifications_active,
-                    color: Colors.blue),
-                title: Text(title,
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(message),
-                    const SizedBox(height: 4),
-                    Text(
-                      formattedTime,
-                      style: const TextStyle(
-                          fontSize: 12, color: Colors.grey),
-                    ),
-                  ],
-                ),
-                onTap: () async {
-                  FirebaseFirestore.instance
-                      .collection('notifications')
-                      .doc(notifs[index].id)
-                      .update({'isRead': true});
-
-                  // ⭐ If receiver → open ConfirmRequestScreen
-                  final currentUid = FirebaseAuth.instance.currentUser?.uid;
-                  if (notif['fromUid'] == currentUid) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            ConfirmRequestScreen(requestId: requestId),
-                      ),
-                    );
-                    return;
-                  }
-
-                  // ⭐ DONOR → existing behavior
-                  final reqDoc = await FirebaseFirestore.instance
-                      .collection("requests")
-                      .doc(requestId)
-                      .get();
-
-                  if (!reqDoc.exists) return;
-
-                  final receiverUid = reqDoc['receiverUid'] ?? '';
-                  final receiverData = await _getUserDetails(receiverUid);
-
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => NotificationDetailScreen(
-                        donorPhone: receiverData['phone']!,
-                        receiverPhone: receiverData['phone']!,
-                        receiverAddress: receiverData['address']!,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // UI -------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          "Notifications",
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Row(
+          children: [
+            const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            if (_unreadCount > 0)
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                child: Text(
+                  '$_unreadCount',
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+          ],
         ),
         backgroundColor: const Color(0xFF87CEEB),
         foregroundColor: Colors.white,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: [
-            Tab(text: "Donor (${_unreadCountDonor})"),
-            Tab(text: "Receiver (${_unreadCountReceiver})"),
-          ],
-        ),
       ),
 
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildNotificationList(_donorNotifications()),
-          _buildNotificationList(_receiverNotifications()),
-        ],
+      body: StreamBuilder<QuerySnapshot>(
+        stream: _getNotifications(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final notifications = snapshot.data!.docs;
+
+          if (notifications.isEmpty) {
+            return const Center(child: Text("No notifications yet."));
+          }
+
+          return ListView.builder(
+            itemCount: notifications.length,
+            itemBuilder: (context, index) {
+              final notif = notifications[index].data() as Map<String, dynamic>;
+
+              final title = notif['title'] ?? '';
+              final message = notif['message'] ?? '';
+              final requestId = notif['requestId'] ?? '';
+
+              final timestamp = notif['timestamp'] as Timestamp?;
+              final date = timestamp?.toDate() ?? DateTime.now();
+              final formattedTime =
+                  "${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2,'0')}";
+
+              final isRead = notif['isRead'] ?? false;
+
+              return Card(
+                color: isRead ? Colors.white : Colors.blue.shade50,
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: ListTile(
+                  leading: const Icon(Icons.notifications_active, color: Colors.blue),
+                  title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(message),
+                      const SizedBox(height: 4),
+                      Text(formattedTime, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
+
+                  onTap: () async {
+                    FirebaseFirestore.instance
+                        .collection('notifications')
+                        .doc(notifications[index].id)
+                        .update({'isRead': true});
+
+                    final requestDoc = await FirebaseFirestore.instance
+                        .collection("requests")
+                        .doc(requestId)
+                        .get();
+
+                    if (!requestDoc.exists) return;
+
+                    final receiverUid = requestDoc.data()?['receiverUid'] ?? '';
+
+                    final receiverData = await _getUserDetails(receiverUid);
+
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => NotificationDetailScreen(
+                          donorPhone: receiverData['phone']!,     // ★ FIX: green text shows receiver phone
+                          receiverPhone: receiverData['phone']!,
+                          receiverAddress: receiverData['address']!,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
