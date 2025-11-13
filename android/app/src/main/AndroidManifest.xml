@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
+    <!-- ⭐ REQUIRED FOR PHONE CALL -->
+    <uses-permission android:name="android.permission.CALL_PHONE"/>
+
     <application
         android:name="${applicationName}"
         android:label="HealthBridge"
@@ -31,7 +34,7 @@
             </intent-filter>
         </activity>
 
-        <!-- ✅ Firebase Messaging Service -->
+        <!-- Firebase Messaging -->
         <service
             android:name="io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingService"
             android:exported="true"
@@ -41,20 +44,24 @@
             </intent-filter>
         </service>
 
-        <!-- ✅ Default Notification Channel for FCM -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="high_importance_channel" />
 
-        <!-- ✅ Required metadata for Flutter -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
 
     </application>
 
-    <!-- ✅ Allow querying for text processing -->
+    <!-- ⭐ REQUIRED FOR CALLING ON ANDROID 11+ -->
     <queries>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+
+        <!-- Your existing query -->
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

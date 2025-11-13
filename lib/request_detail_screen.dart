@@ -40,50 +40,93 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       if (doc.exists) {
         final data = doc.data()!;
         setState(() {
-          donorName = _asString(data['name']);
-          donorPhone = _asString(data['phone']);
-          donorEmail = _asString(data['email']);
-          donorAddress = _asString(data['address']);
+          donorName = data['name'] ?? '-';
+          donorPhone = data['phone'] ?? '-';
+          donorEmail = data['email'] ?? '-';
+
+          donorAddress = data['address'] is Map
+              ? [
+            data['address']?['street'],
+            data['address']?['city'],
+            data['address']?['state'],
+            data['address']?['pincode']
+          ]
+              .where((e) => e != null && e.toString().isNotEmpty)
+              .join(", ")
+              : data['address']?.toString() ?? '-';
+
           loading = false;
         });
       } else {
         setState(() => loading = false);
       }
     } catch (e) {
-      debugPrint('Error fetching donor details: $e');
       setState(() => loading = false);
     }
   }
 
-  String _asString(dynamic v) {
-    if (v == null) return '-';
-    if (v is String) return v;
-    if (v is Map) return v.values.join(', ');
-    if (v is List) return v.join(', ');
-    return v.toString();
-  }
-
-  int? _safeInt(dynamic v) {
-    if (v == null) return null;
-    if (v is int) return v;
-    if (v is String) return int.tryParse(v);
-    if (v is double) return v.toInt();
-    return null;
-  }
-
+  // ⭐ UPDATED: SEND NOTIFICATION TO DONOR + RECEIVER ⭐
   Future<void> _notifyDonor() async {
     try {
+      // Fetch receiver (the requester)
+      final receiverDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.request.receiverUid)
+          .get();
+
+      final receiverData = receiverDoc.data() ?? {};
+      final String receiverPhone = receiverData['phone'] ?? '';
+
+      String receiverAddress = "";
+      if (receiverData['address'] != null && receiverData['address'] is Map) {
+        final a = Map<String, dynamic>.from(receiverData['address']);
+        receiverAddress = [
+          a['street'],
+          a['city'],
+          a['state'],
+          a['pincode']
+        ]
+            .where((e) => e != null && e.toString().trim().isNotEmpty)
+            .join(", ");
+      }
+
+      // ⭐ 1 — SEND NOTIFICATION TO DONOR
       await FirebaseFirestore.instance.collection('notifications').add({
-        'toUid': widget.request.donorUid,
-        'fromUid': widget.request.receiverUid,
-        'title': 'New Request Received',
-        'body': '${widget.request.itemName} has been requested.',
+        'toUid': widget.request.donorUid,      // donor gets this
+        'fromUid': widget.request.receiverUid, // sender = receiver
+        'requestId': widget.request.id,
+
+        'title': 'New Donation Request',
+        'message':
+        '${receiverData['name'] ?? 'Someone'} has requested ${widget.request.itemName}.',
+
+        'receiverPhone': receiverPhone,
+        'receiverAddress': receiverAddress,
+
         'timestamp': FieldValue.serverTimestamp(),
-        'read': false,
+        'isRead': false,
+      });
+
+      // ⭐ 2 — SEND NOTIFICATION TO RECEIVER ALSO
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'toUid': widget.request.receiverUid,      // receiver gets this
+        'fromUid': widget.request.receiverUid,    // for receiver tab filter
+        'requestId': widget.request.id,
+
+        'title': 'Request Submitted',
+        'message': 'Your request has been sent. Tap to confirm.',
+
+        // Send item details also
+        'itemName': widget.request.itemName,
+        'quantity': widget.request.quantity ?? 1,
+        'type': widget.request.type,
+
+        'timestamp': FieldValue.serverTimestamp(),
+        'isRead': false,
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Notification sent to donor!')),
+        const SnackBar(content: Text('Notification sent!')),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -95,8 +138,8 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final request = widget.request;
-    final String itemName = request.itemName;
-    final int quantity = _safeInt(request.quantity) ?? 1;
+
+    final int quantity = request.quantity ?? 1;
     final String status = request.status;
     final String imageUrl = request.imageUrl ?? '';
 
@@ -128,17 +171,8 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                           height: 160,
                           width: 160,
                           fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) =>
+                          errorBuilder: (_, __, ___) =>
                           const Icon(Icons.broken_image, size: 80),
-                          loadingBuilder: (c, child, progress) {
-                            if (progress == null) return child;
-                            return const SizedBox(
-                              height: 160,
-                              width: 160,
-                              child: Center(
-                                  child: CircularProgressIndicator()),
-                            );
-                          },
                         ),
                       ),
                     )
@@ -158,7 +192,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                   const SizedBox(height: 12),
                   Center(
                     child: Text(
-                      itemName,
+                      request.itemName,
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -173,11 +207,8 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                       style: TextStyle(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
                   _buildDetailRow("👤 Name", donorName),
-                  const SizedBox(height: 8),
                   _buildDetailRow("📞 Phone", donorPhone),
-                  const SizedBox(height: 8),
-                  _buildDetailRow("✉️ Email", donorEmail),
-                  const SizedBox(height: 8),
+                  _buildDetailRow("✉ Email", donorEmail),
                   _buildDetailRow("🏠 Address", donorAddress),
                   const SizedBox(height: 12),
                   _buildDetailRow("📌 Status", status),
@@ -211,31 +242,25 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     );
   }
 
-  Widget _buildDetailRow(String label, String value, {Color? valueColor}) {
+  Widget _buildDetailRow(String label, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
           flex: 3,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
-            ),
-          ),
+          child: Text(label,
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87)),
         ),
         Expanded(
           flex: 4,
-          child: Text(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: valueColor ?? Colors.black87,
-            ),
-          ),
+          child: Text(value,
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87)),
         ),
       ],
     );

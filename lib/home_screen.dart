@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'request_form_page.dart';
 import 'donor_form.dart';
@@ -15,10 +14,6 @@ import 'request_detail_screen.dart';
 import 'donation_detail_screen.dart';
 import 'notifications_screen.dart';
 import 'models/notification_model.dart'; // ✅ ensure this import exists
-
-// ✅ Local notifications plugin initialization
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-FlutterLocalNotificationsPlugin();
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -48,7 +43,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeFCM(); // ✅ Added notification setup (no UI change)
     final user = currentUser;
     if (user != null) {
       userEmail = user.email ?? '';
@@ -64,45 +58,6 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       });
     }
-  }
-
-  // ✅ Initialize FCM and Local Notifications
-  Future<void> _initializeFCM() async {
-    // Initialize local notifications
-    const AndroidInitializationSettings initializationSettingsAndroid =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const InitializationSettings initializationSettings =
-    InitializationSettings(android: initializationSettingsAndroid);
-
-    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
-
-    // Foreground notification listener
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      final notification = message.notification;
-      final android = message.notification?.android;
-      if (notification != null && android != null) {
-        flutterLocalNotificationsPlugin.show(
-          notification.hashCode,
-          notification.title,
-          notification.body,
-          const NotificationDetails(
-            android: AndroidNotificationDetails(
-              'high_importance_channel',
-              'High Importance Notifications',
-              importance: Importance.max,
-              priority: Priority.high,
-              icon: '@mipmap/ic_launcher',
-            ),
-          ),
-        );
-      }
-    });
-
-    // When user taps a notification to open the app
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      debugPrint("🔗 Notification clicked: ${message.notification?.title}");
-    });
   }
 
   Future<void> _saveFcmToken() async {
