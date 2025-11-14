@@ -22,6 +22,11 @@ class _ReceiverPageState extends State<ReceiverPage>
   @override
   void initState() {
     super.initState();
+
+    // ❌ REMOVE — moved to main.dart
+    // FirebaseFirestore.instance.settings =
+    //     const Settings(persistenceEnabled: false);
+
     _tabController = TabController(length: 2, vsync: this);
     _loadUserProfile();
   }
@@ -33,7 +38,11 @@ class _ReceiverPageState extends State<ReceiverPage>
     _userUid = user.uid;
     _userEmail = user.email ?? "";
 
-    final doc = await FirebaseFirestore.instance.collection("users").doc(user.uid).get();
+    final doc = await FirebaseFirestore.instance
+        .collection("users")
+        .doc(user.uid)
+        .get();
+
     if (doc.exists && doc.data() != null) {
       final data = doc.data()!;
       setState(() {
@@ -43,26 +52,25 @@ class _ReceiverPageState extends State<ReceiverPage>
     }
   }
 
-  // ⭐ FIXED: Correct donorUid handling + adds receiver notification
+  // ---------------------------------------------------------------
+  // REQUEST ITEM
+  // ---------------------------------------------------------------
   Future<void> _requestItem(Map<String, dynamic> donorData) async {
     try {
       final correctDonorUid =
-          donorData['uid'] ?? donorData['donorUid'] ?? "";   // ⭐ FIX HERE
+          donorData['uid'] ?? donorData['donorUid'] ?? "";
 
       if (correctDonorUid.isEmpty) {
         throw "Donor UID missing in donation document!";
       }
 
-      // ⭐ 1 — SAVE REQUEST
-      final reqRef = await FirebaseFirestore.instance.collection("requests").add({
+      final reqRef =
+      await FirebaseFirestore.instance.collection("requests").add({
         "receiverUid": _userUid,
         "receiverName": _userName,
         "receiverEmail": _userEmail,
         "receiverPhone": _userPhone,
-
-        // ⭐ FIXED — now saving correct donor UID
         "donorUid": correctDonorUid,
-
         "itemName": donorData['itemName'],
         "expiryDate": donorData['expiryDate'],
         "type": donorData['type'],
@@ -71,7 +79,6 @@ class _ReceiverPageState extends State<ReceiverPage>
         "imageUrl": donorData['imageUrl'],
       });
 
-      // ⭐ 2 — SEND RECEIVER NOTIFICATION
       await FirebaseFirestore.instance.collection('notifications').add({
         'toUid': _userUid,
         'fromUid': _userUid,
@@ -123,9 +130,9 @@ class _ReceiverPageState extends State<ReceiverPage>
     }
   }
 
-  // -----------------------------------------
-  // NO UI CHANGES BELOW THIS LINE
-  // -----------------------------------------
+  // ---------------------------------------------------------------
+  // UI BUILDERS (NO CHANGES)
+  // ---------------------------------------------------------------
 
   Widget _buildGroupedItemCard(
       String groupKey, List<Map<String, dynamic>> donors, String type) {
@@ -138,7 +145,8 @@ class _ReceiverPageState extends State<ReceiverPage>
       elevation: 3,
       margin: const EdgeInsets.symmetric(vertical: 10),
       child: ExpansionTile(
-        leading: (firstItem['imageUrl'] != null && firstItem['imageUrl'] != "")
+        leading: (firstItem['imageUrl'] != null &&
+            firstItem['imageUrl'] != "")
             ? ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: Image.network(
@@ -175,11 +183,12 @@ class _ReceiverPageState extends State<ReceiverPage>
                   .where("receiverUid", isEqualTo: _userUid)
                   .where("itemName", isEqualTo: donor['itemName'])
                   .where("expiryDate", isEqualTo: donor['expiryDate'])
-                  .where("donorUid", isEqualTo: donor['uid'])   // ⭐ FIX: correct donor UID
+                  .where("donorUid", isEqualTo: donor['uid'])
                   .where("status", isEqualTo: "Pending")
                   .get(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                if (snapshot.connectionState ==
+                    ConnectionState.waiting) {
                   return const SizedBox(
                     height: 25,
                     width: 25,
@@ -187,8 +196,8 @@ class _ReceiverPageState extends State<ReceiverPage>
                   );
                 }
 
-                final alreadyRequested =
-                    snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+                final alreadyRequested = snapshot.hasData &&
+                    snapshot.data!.docs.isNotEmpty;
 
                 if (alreadyRequested) {
                   final requestId = snapshot.data!.docs.first.id;
@@ -230,7 +239,8 @@ class _ReceiverPageState extends State<ReceiverPage>
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => DonationDetailPage(itemData: donor),
+                  builder: (context) =>
+                      DonationDetailPage(itemData: donor),
                 ),
               );
             },
@@ -247,6 +257,7 @@ class _ReceiverPageState extends State<ReceiverPage>
     }
 
     final Map<String, List<Map<String, dynamic>>> grouped = {};
+
     for (var doc in docs) {
       final data = doc.data() as Map<String, dynamic>;
       final name = data['itemName'] ?? "Unnamed Item";
@@ -258,7 +269,8 @@ class _ReceiverPageState extends State<ReceiverPage>
     return ListView(
       padding: const EdgeInsets.all(15),
       children: grouped.entries
-          .map((entry) => _buildGroupedItemCard(entry.key, entry.value, type))
+          .map((entry) => _buildGroupedItemCard(
+          entry.key, entry.value, type))
           .toList(),
     );
   }
@@ -271,7 +283,8 @@ class _ReceiverPageState extends State<ReceiverPage>
           .where("donorUid", isNotEqualTo: _userUid)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState ==
+            ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
         return _buildGroupedList(snapshot.data!, "medicines");
@@ -287,7 +300,8 @@ class _ReceiverPageState extends State<ReceiverPage>
           .where("donorUid", isNotEqualTo: _userUid)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState ==
+            ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
         return _buildGroupedList(snapshot.data!, "equipment");

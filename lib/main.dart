@@ -4,11 +4,19 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // 🔥 FIX: disable Firestore persistence AFTER Firebase initializes
+  FirebaseFirestore.instance.settings =
+  const Settings(persistenceEnabled: false);
+
   runApp(const MyApp());
 }
 
