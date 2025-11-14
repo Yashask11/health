@@ -17,8 +17,10 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
   String itemName = "-";
   String type = "-";
   String donorUid = "";
+  String expiryDate = "";
+  String receiverUid = "";
 
-  // Donor details (same as RequestDetailScreen)
+  // Donor details
   String donorName = "-";
   String donorPhone = "-";
   String donorEmail = "-";
@@ -46,8 +48,10 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
       itemName = data["itemName"] ?? "-";
       type = data["type"] ?? "-";
       donorUid = data["donorUid"] ?? "";
+      expiryDate = data["expiryDate"] ?? "";
+      receiverUid = data["receiverUid"] ?? "";
 
-      // ⭐ SAME LOGIC AS REQUEST_DETAIL_SCREEN
+      // Load donor details
       await _loadDonorDetails();
 
       setState(() => loading = false);
@@ -56,15 +60,12 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
     }
   }
 
-  // ⭐ EXACT COPY FROM REQUEST_DETAIL_SCREEN
   Future<void> _loadDonorDetails() async {
     if (donorUid.isEmpty) return;
 
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(donorUid)
-          .get();
+      final doc =
+      await FirebaseFirestore.instance.collection('users').doc(donorUid).get();
 
       if (doc.exists) {
         final data = doc.data()!;
@@ -86,20 +87,59 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
     } catch (_) {}
   }
 
+  // 🔥 STEP 1 + 2 + 3: Confirm → delete donation → notify donor
   Future<void> _confirmRequest() async {
-    await FirebaseFirestore.instance
-        .collection("requests")
-        .doc(widget.requestId)
-        .update({"status": "Confirmed"});
+    try {
+      // STEP 1: UPDATE REQUEST STATUS
+      await FirebaseFirestore.instance
+          .collection("requests")
+          .doc(widget.requestId)
+          .update({"status": "Confirmed"});
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Request Confirmed!"),
-        backgroundColor: Colors.green,
-      ),
-    );
+      // STEP 2: DELETE THE DONATION DOCUMENT
+      final donationSnap = await FirebaseFirestore.instance
+          .collection("donations")
+          .where("itemName", isEqualTo: itemName)
+          .where("donorUid", isEqualTo: donorUid)
+          .where("expiryDate", isEqualTo: expiryDate)
+          .get();
 
-    Navigator.pop(context);
+      for (var doc in donationSnap.docs) {
+        await FirebaseFirestore.instance
+            .collection("donations")
+            .doc(doc.id)
+            .delete();
+      }
+
+      // STEP 3: NOTIFY DONOR
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'toUid': donorUid,
+        'fromUid': receiverUid,
+        'requestId': widget.requestId,
+        'title': 'Request Confirmed',
+        'message':
+        'Your donation item "$itemName" has been confirmed by the receiver.',
+        'timestamp': FieldValue.serverTimestamp(),
+        'isRead': false,
+        'type': 'donor_confirm',
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Request Confirmed! Donor Notified."),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -142,7 +182,6 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
                           fontWeight: FontWeight.bold, fontSize: 18)),
                   const SizedBox(height: 10),
 
-                  // ⭐ DONOR DETAILS — EXACT SAME UI
                   _buildDetailRow("👤 Name", donorName),
                   _buildDetailRow("📞 Phone", donorPhone),
                   _buildDetailRow("✉ Email", donorEmail),
@@ -159,8 +198,8 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
                               horizontal: 40, vertical: 12)),
                       child: const Text(
                         "Confirm Request",
-                        style: TextStyle(
-                            color: Colors.white, fontSize: 16),
+                        style:
+                        TextStyle(color: Colors.white, fontSize: 16),
                       ),
                     ),
                   )
@@ -173,7 +212,6 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
     );
   }
 
-  // ⭐ EXACT SAME DETAIL ROW AS REQUEST_DETAIL_SCREEN
   Widget _buildDetailRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
@@ -183,14 +221,14 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
           Expanded(
             flex: 3,
             child: Text(label,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 16)),
+                style:
+                const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
           ),
           Expanded(
             flex: 4,
             child: Text(value,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w500, fontSize: 16)),
+                style:
+                const TextStyle(fontWeight: FontWeight.w500, fontSize: 16)),
           ),
         ],
       ),

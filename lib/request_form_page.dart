@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'donation_detail_screen.dart';
+import 'models/request.dart';
+import 'request_detail_screen.dart';
 
 class ReceiverPage extends StatefulWidget {
   const ReceiverPage({super.key});
@@ -22,11 +24,6 @@ class _ReceiverPageState extends State<ReceiverPage>
   @override
   void initState() {
     super.initState();
-
-    // ❌ REMOVE — moved to main.dart
-    // FirebaseFirestore.instance.settings =
-    //     const Settings(persistenceEnabled: false);
-
     _tabController = TabController(length: 2, vsync: this);
     _loadUserProfile();
   }
@@ -53,7 +50,7 @@ class _ReceiverPageState extends State<ReceiverPage>
   }
 
   // ---------------------------------------------------------------
-  // REQUEST ITEM
+  // REQUEST ITEM  (Donor notification removed as requested)
   // ---------------------------------------------------------------
   Future<void> _requestItem(Map<String, dynamic> donorData) async {
     try {
@@ -61,11 +58,13 @@ class _ReceiverPageState extends State<ReceiverPage>
           donorData['uid'] ?? donorData['donorUid'] ?? "";
 
       if (correctDonorUid.isEmpty) {
-        throw "Donor UID missing in donation document!";
+        throw "Donor UID missing!";
       }
 
-      final reqRef =
-      await FirebaseFirestore.instance.collection("requests").add({
+      /// 1. SAVE REQUEST
+      final reqRef = await FirebaseFirestore.instance
+          .collection("requests")
+          .add({
         "receiverUid": _userUid,
         "receiverName": _userName,
         "receiverEmail": _userEmail,
@@ -77,8 +76,29 @@ class _ReceiverPageState extends State<ReceiverPage>
         "timestamp": FieldValue.serverTimestamp(),
         "status": "Pending",
         "imageUrl": donorData['imageUrl'],
+        "quantity": donorData['quantity'] ?? 1,
       });
 
+      /// 2. FETCH REQUEST FOR SCREEN
+      final reqDoc = await FirebaseFirestore.instance
+          .collection("requests")
+          .doc(reqRef.id)
+          .get();
+
+      final request = Request.fromMap(
+        reqDoc.id,
+        reqDoc.data() as Map<String, dynamic>,
+      );
+
+      /// 3. OPEN REQUEST DETAILS PAGE
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => RequestDetailScreen(request: request),
+        ),
+      );
+
+      /// ⭐ ONLY SEND RECEIVER NOTIFICATION
       await FirebaseFirestore.instance.collection('notifications').add({
         'toUid': _userUid,
         'fromUid': _userUid,
@@ -87,15 +107,9 @@ class _ReceiverPageState extends State<ReceiverPage>
         'message': 'Your request has been submitted. Tap to confirm.',
         'timestamp': FieldValue.serverTimestamp(),
         'isRead': false,
-        'type': 'receiver_confirm',
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("✅ Request sent. Waiting for donor approval."),
-          backgroundColor: Colors.green,
-        ),
-      );
+      /// ❌ DONOR NOTIFICATION REMOVED (per your request)
 
       setState(() {});
     } catch (e) {
@@ -130,9 +144,9 @@ class _ReceiverPageState extends State<ReceiverPage>
     }
   }
 
-  // ---------------------------------------------------------------
-  // UI BUILDERS (NO CHANGES)
-  // ---------------------------------------------------------------
+  // -------------------------------------------------------------------
+  // UI — UNCHANGED
+  // -------------------------------------------------------------------
 
   Widget _buildGroupedItemCard(
       String groupKey, List<Map<String, dynamic>> donors, String type) {
@@ -187,8 +201,7 @@ class _ReceiverPageState extends State<ReceiverPage>
                   .where("status", isEqualTo: "Pending")
                   .get(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState ==
-                    ConnectionState.waiting) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const SizedBox(
                     height: 25,
                     width: 25,
@@ -196,8 +209,8 @@ class _ReceiverPageState extends State<ReceiverPage>
                   );
                 }
 
-                final alreadyRequested = snapshot.hasData &&
-                    snapshot.data!.docs.isNotEmpty;
+                final alreadyRequested =
+                    snapshot.hasData && snapshot.data!.docs.isNotEmpty;
 
                 if (alreadyRequested) {
                   final requestId = snapshot.data!.docs.first.id;
@@ -269,8 +282,8 @@ class _ReceiverPageState extends State<ReceiverPage>
     return ListView(
       padding: const EdgeInsets.all(15),
       children: grouped.entries
-          .map((entry) => _buildGroupedItemCard(
-          entry.key, entry.value, type))
+          .map((entry) =>
+          _buildGroupedItemCard(entry.key, entry.value, type))
           .toList(),
     );
   }
@@ -283,8 +296,7 @@ class _ReceiverPageState extends State<ReceiverPage>
           .where("donorUid", isNotEqualTo: _userUid)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState ==
-            ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
         return _buildGroupedList(snapshot.data!, "medicines");
@@ -300,8 +312,7 @@ class _ReceiverPageState extends State<ReceiverPage>
           .where("donorUid", isNotEqualTo: _userUid)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState ==
-            ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
         return _buildGroupedList(snapshot.data!, "equipment");
