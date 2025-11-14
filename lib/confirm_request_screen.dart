@@ -4,34 +4,34 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class ConfirmRequestScreen extends StatefulWidget {
   final String requestId;
 
-  const ConfirmRequestScreen({
-    super.key,
-    required this.requestId,
-  });
+  const ConfirmRequestScreen({super.key, required this.requestId});
 
   @override
   State<ConfirmRequestScreen> createState() => _ConfirmRequestScreenState();
 }
 
 class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
-  Map<String, dynamic>? requestData;
+  bool loading = true;
 
+  // Request fields
+  String itemName = "-";
+  String type = "-";
+  String donorUid = "";
+
+  // Donor details (same as RequestDetailScreen)
   String donorName = "-";
   String donorPhone = "-";
   String donorEmail = "-";
   String donorAddress = "-";
 
-  bool loading = true;
-
   @override
   void initState() {
     super.initState();
-    _loadRequest();
+    _loadRequestAndDonor();
   }
 
-  Future<void> _loadRequest() async {
+  Future<void> _loadRequestAndDonor() async {
     try {
-      // ⭐ LOAD REQUEST
       final reqSnap = await FirebaseFirestore.instance
           .collection("requests")
           .doc(widget.requestId)
@@ -42,13 +42,13 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
         return;
       }
 
-      requestData = reqSnap.data()!;
+      final data = reqSnap.data()!;
+      itemName = data["itemName"] ?? "-";
+      type = data["type"] ?? "-";
+      donorUid = data["donorUid"] ?? "";
 
-      // ⭐ FETCH DONOR DETAILS FROM USERS COLLECTION
-      final donorUid = requestData!['donorUid'];
-      if (donorUid != null && donorUid.toString().isNotEmpty) {
-        await _loadDonorDetails(donorUid);
-      }
+      // ⭐ SAME LOGIC AS REQUEST_DETAIL_SCREEN
+      await _loadDonorDetails();
 
       setState(() => loading = false);
     } catch (e) {
@@ -56,30 +56,34 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
     }
   }
 
-  Future<void> _loadDonorDetails(String donorUid) async {
-    final donorDoc = await FirebaseFirestore.instance
-        .collection("users")
-        .doc(donorUid)
-        .get();
+  // ⭐ EXACT COPY FROM REQUEST_DETAIL_SCREEN
+  Future<void> _loadDonorDetails() async {
+    if (donorUid.isEmpty) return;
 
-    if (!donorDoc.exists) return;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(donorUid)
+          .get();
 
-    final data = donorDoc.data()!;
-    donorName = data['name'] ?? "-";
-    donorPhone = data['phone'] ?? "-";
-    donorEmail = data['email'] ?? "-";
+      if (doc.exists) {
+        final data = doc.data()!;
+        donorName = data['name'] ?? '-';
+        donorPhone = data['phone'] ?? '-';
+        donorEmail = data['email'] ?? '-';
 
-    if (data['address'] != null && data['address'] is Map) {
-      final a = Map<String, dynamic>.from(data['address']);
-      donorAddress = [
-        a['street'],
-        a['city'],
-        a['state'],
-        a['pincode']
-      ]
-          .where((v) => v != null && v.toString().isNotEmpty)
-          .join(", ");
-    }
+        donorAddress = data['address'] is Map
+            ? [
+          data['address']?['street'],
+          data['address']?['city'],
+          data['address']?['state'],
+          data['address']?['pincode']
+        ]
+            .where((v) => v != null && v.toString().trim().isNotEmpty)
+            .join(", ")
+            : data['address']?.toString() ?? '-';
+      }
+    } catch (_) {}
   }
 
   Future<void> _confirmRequest() async {
@@ -88,11 +92,9 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
         .doc(widget.requestId)
         .update({"status": "Confirmed"});
 
-    // Optionally notify donor later (not required now)
-
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text("Request confirmed successfully!"),
+        content: Text("Request Confirmed!"),
         backgroundColor: Colors.green,
       ),
     );
@@ -102,34 +104,22 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (requestData == null) {
-      return const Scaffold(
-        body: Center(child: Text("Request not found.")),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: const Text("Confirm Request"),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
-
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+        padding: const EdgeInsets.all(16),
         child: Card(
           elevation: 6,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+              borderRadius: BorderRadius.circular(12)),
           child: Padding(
-            padding: const EdgeInsets.all(20.0),
+            padding: const EdgeInsets.all(20),
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -137,66 +127,43 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
                   const Text(
                     "Confirm Your Request",
                     style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.teal,
-                    ),
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.teal),
                   ),
                   const SizedBox(height: 20),
 
-                  // ⭐ ITEM NAME
-                  _row("Item Name", requestData!["itemName"] ?? "-"),
+                  _buildDetailRow("Item Name", itemName),
+                  _buildDetailRow("Type", type),
 
-                  // ⭐ ITEM TYPE
-                  _row("Type", requestData!["type"] ?? "-"),
-
-                  // ⭐ IMAGE
-                  if (requestData!["imageUrl"] != null &&
-                      requestData!["imageUrl"].toString().isNotEmpty)
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Image.network(
-                          requestData!["imageUrl"],
-                          height: 150,
-                          width: 150,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-
-                  const Divider(height: 30, thickness: 1),
-
-                  const Text(
-                    "Donor Details",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
+                  const Divider(height: 30),
+                  const Text("Donor Details",
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 18)),
                   const SizedBox(height: 10),
 
-                  _row("👤 Name", donorName),
-                  _row("📞 Phone", donorPhone),
-                  _row("✉ Email", donorEmail),
-                  _row("🏠 Address", donorAddress),
+                  // ⭐ DONOR DETAILS — EXACT SAME UI
+                  _buildDetailRow("👤 Name", donorName),
+                  _buildDetailRow("📞 Phone", donorPhone),
+                  _buildDetailRow("✉ Email", donorEmail),
+                  _buildDetailRow("🏠 Address", donorAddress),
 
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 25),
 
                   Center(
                     child: ElevatedButton(
                       onPressed: _confirmRequest,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 40, vertical: 14),
-                      ),
+                          backgroundColor: Colors.teal,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 40, vertical: 12)),
                       child: const Text(
                         "Confirm Request",
-                        style: TextStyle(fontSize: 18, color: Colors.white),
+                        style: TextStyle(
+                            color: Colors.white, fontSize: 16),
                       ),
                     ),
-                  ),
+                  )
                 ],
               ),
             ),
@@ -206,25 +173,24 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
     );
   }
 
-  Widget _row(String label, String value) {
+  // ⭐ EXACT SAME DETAIL ROW AS REQUEST_DETAIL_SCREEN
+  Widget _buildDetailRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             flex: 3,
-            child: Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
+            child: Text(label,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 16)),
           ),
           Expanded(
             flex: 4,
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
+            child: Text(value,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w500, fontSize: 16)),
           ),
         ],
       ),
