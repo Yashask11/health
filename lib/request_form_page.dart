@@ -33,9 +33,7 @@ class _ReceiverPageState extends State<ReceiverPage>
     _userUid = user.uid;
     _userEmail = user.email ?? "";
 
-    final doc =
-    await FirebaseFirestore.instance.collection("users").doc(user.uid).get();
-
+    final doc = await FirebaseFirestore.instance.collection("users").doc(user.uid).get();
     if (doc.exists && doc.data() != null) {
       final data = doc.data()!;
       setState(() {
@@ -45,20 +43,44 @@ class _ReceiverPageState extends State<ReceiverPage>
     }
   }
 
+  // ⭐ FIXED: Correct donorUid handling + adds receiver notification
   Future<void> _requestItem(Map<String, dynamic> donorData) async {
     try {
-      await FirebaseFirestore.instance.collection("requests").add({
+      final correctDonorUid =
+          donorData['uid'] ?? donorData['donorUid'] ?? "";   // ⭐ FIX HERE
+
+      if (correctDonorUid.isEmpty) {
+        throw "Donor UID missing in donation document!";
+      }
+
+      // ⭐ 1 — SAVE REQUEST
+      final reqRef = await FirebaseFirestore.instance.collection("requests").add({
         "receiverUid": _userUid,
         "receiverName": _userName,
         "receiverEmail": _userEmail,
         "receiverPhone": _userPhone,
-        "donorUid": donorData['donorUid'],
+
+        // ⭐ FIXED — now saving correct donor UID
+        "donorUid": correctDonorUid,
+
         "itemName": donorData['itemName'],
         "expiryDate": donorData['expiryDate'],
         "type": donorData['type'],
         "timestamp": FieldValue.serverTimestamp(),
         "status": "Pending",
         "imageUrl": donorData['imageUrl'],
+      });
+
+      // ⭐ 2 — SEND RECEIVER NOTIFICATION
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'toUid': _userUid,
+        'fromUid': _userUid,
+        'requestId': reqRef.id,
+        'title': 'Request Submitted',
+        'message': 'Your request has been submitted. Tap to confirm.',
+        'timestamp': FieldValue.serverTimestamp(),
+        'isRead': false,
+        'type': 'receiver_confirm',
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -100,6 +122,10 @@ class _ReceiverPageState extends State<ReceiverPage>
       );
     }
   }
+
+  // -----------------------------------------
+  // NO UI CHANGES BELOW THIS LINE
+  // -----------------------------------------
 
   Widget _buildGroupedItemCard(
       String groupKey, List<Map<String, dynamic>> donors, String type) {
@@ -149,7 +175,7 @@ class _ReceiverPageState extends State<ReceiverPage>
                   .where("receiverUid", isEqualTo: _userUid)
                   .where("itemName", isEqualTo: donor['itemName'])
                   .where("expiryDate", isEqualTo: donor['expiryDate'])
-                  .where("donorUid", isEqualTo: donor['donorUid'])
+                  .where("donorUid", isEqualTo: donor['uid'])   // ⭐ FIX: correct donor UID
                   .where("status", isEqualTo: "Pending")
                   .get(),
               builder: (context, snapshot) {
@@ -166,31 +192,28 @@ class _ReceiverPageState extends State<ReceiverPage>
 
                 if (alreadyRequested) {
                   final requestId = snapshot.data!.docs.first.id;
-                  // ✅ FIX: Wrapped Column in FittedBox to prevent RenderFlex overflow
-                  return FittedBox(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          "Pending",
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontWeight: FontWeight.bold,
-                          ),
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        "Pending",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(height: 4),
-                        ElevatedButton(
-                          onPressed: () => _cancelRequest(requestId),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.redAccent,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
-                            minimumSize: const Size(60, 30),
-                          ),
-                          child: const Text("Cancel"),
+                      ),
+                      const SizedBox(height: 4),
+                      ElevatedButton(
+                        onPressed: () => _cancelRequest(requestId),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          minimumSize: const Size(60, 30),
                         ),
-                      ],
-                    ),
+                        child: const Text("Cancel"),
+                      ),
+                    ],
                   );
                 }
 

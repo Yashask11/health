@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'notification_detail_screen.dart';
+import 'confirm_request_screen.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -30,11 +31,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Future<void> _initNotifications() async {
     await _messaging.requestPermission();
 
-    const AndroidInitializationSettings androidInit =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const InitializationSettings initSettings =
-    InitializationSettings(android: androidInit);
+    const initSettings = InitializationSettings(android: androidInit);
 
     await _localNotifications.initialize(initSettings);
   }
@@ -59,8 +58,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
         .where('toUid', isEqualTo: currentUser.uid)
         .where('isRead', isEqualTo: false)
         .snapshots()
-        .listen((snapshot) {
-      setState(() => _unreadCount = snapshot.docs.length);
+        .listen((snap) {
+      setState(() => _unreadCount = snap.docs.length);
     });
   }
 
@@ -68,6 +67,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     try {
       final doc =
       await FirebaseFirestore.instance.collection('users').doc(uid).get();
+
       if (!doc.exists) return {'phone': '', 'address': ''};
 
       final data = doc.data()!;
@@ -81,9 +81,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
           a['city'],
           a['state'],
           a['pincode']
-        ]
-            .where((v) => v != null && v.toString().trim().isNotEmpty)
-            .join(", ");
+        ].where((v) => v != null && v.toString().trim().isNotEmpty).join(", ");
       }
 
       return {'phone': phone, 'address': address};
@@ -98,15 +96,20 @@ class _NotificationScreenState extends State<NotificationScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text("Notifications",
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(width: 8),
             if (_unreadCount > 0)
               Container(
                 padding: const EdgeInsets.all(6),
-                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                decoration: const BoxDecoration(
+                    color: Colors.red, shape: BoxShape.circle),
                 child: Text(
                   '$_unreadCount',
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold),
                 ),
               ),
           ],
@@ -118,7 +121,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
       body: StreamBuilder<QuerySnapshot>(
         stream: _getNotifications(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
           final notifications = snapshot.data!.docs;
 
           if (notifications.isEmpty) {
@@ -128,7 +134,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
           return ListView.builder(
             itemCount: notifications.length,
             itemBuilder: (context, index) {
-              final notif = notifications[index].data() as Map<String, dynamic>;
+              final notif =
+              notifications[index].data() as Map<String, dynamic>;
 
               final title = notif['title'] ?? '';
               final message = notif['message'] ?? '';
@@ -137,22 +144,29 @@ class _NotificationScreenState extends State<NotificationScreen> {
               final timestamp = notif['timestamp'] as Timestamp?;
               final date = timestamp?.toDate() ?? DateTime.now();
               final formattedTime =
-                  "${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2,'0')}";
+                  "${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}";
 
               final isRead = notif['isRead'] ?? false;
 
               return Card(
                 color: isRead ? Colors.white : Colors.blue.shade50,
-                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                margin:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 child: ListTile(
-                  leading: const Icon(Icons.notifications_active, color: Colors.blue),
-                  title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  leading: const Icon(Icons.notifications_active,
+                      color: Colors.blue),
+                  title: Text(title,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(message),
                       const SizedBox(height: 4),
-                      Text(formattedTime, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                      Text(
+                        formattedTime,
+                        style: const TextStyle(
+                            fontSize: 12, color: Colors.grey),
+                      ),
                     ],
                   ),
 
@@ -162,24 +176,51 @@ class _NotificationScreenState extends State<NotificationScreen> {
                         .doc(notifications[index].id)
                         .update({'isRead': true});
 
-                    final requestDoc = await FirebaseFirestore.instance
+                    if (requestId.isEmpty) return;
+
+                    final reqSnap = await FirebaseFirestore.instance
                         .collection("requests")
                         .doc(requestId)
                         .get();
 
-                    if (!requestDoc.exists) return;
+                    if (!reqSnap.exists) return;
 
-                    final receiverUid = requestDoc.data()?['receiverUid'] ?? '';
+                    final requestData =
+                        reqSnap.data() as Map<String, dynamic>? ?? {};
 
-                    final receiverData = await _getUserDetails(receiverUid);
+                    // ⭐ RECEIVER NOTIFICATION → ConfirmRequestScreen
+                    if (title == "Request Submitted") {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              ConfirmRequestScreen(requestId: requestId),
+                        ),
+                      );
+                      return;
+                    }
+
+                    // ⭐ DONOR NOTIFICATION → Normal detail screen
+                    final receiverUid = requestData['receiverUid'] ?? '';
+
+                    Map<String, String> receiverData = {
+                      'phone': '',
+                      'address': ''
+                    };
+
+                    if (receiverUid.toString().isNotEmpty) {
+                      receiverData =
+                      await _getUserDetails(receiverUid.toString());
+                    }
 
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => NotificationDetailScreen(
-                          donorPhone: receiverData['phone']!,     // ★ FIX: green text shows receiver phone
-                          receiverPhone: receiverData['phone']!,
-                          receiverAddress: receiverData['address']!,
+                        builder: (_) => NotificationDetailScreen(
+                          donorPhone: receiverData['phone'] ?? '',
+                          receiverPhone: receiverData['phone'] ?? '',
+                          receiverAddress: receiverData['address'] ?? '',
+                          donationData: requestData,
                         ),
                       ),
                     );
