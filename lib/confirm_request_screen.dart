@@ -19,6 +19,7 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
   String donorUid = "";
   String expiryDate = "";
   String receiverUid = "";
+  String donationId = ""; // ← NEW FIELD
 
   // Donor details
   String donorName = "-";
@@ -50,22 +51,22 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
       donorUid = data["donorUid"] ?? "";
       expiryDate = data["expiryDate"] ?? "";
       receiverUid = data["receiverUid"] ?? "";
+      donationId = data["donationId"] ?? "";  // ← FETCH donationId
 
-      // Load donor details
       await _loadDonorDetails();
+    } catch (e) {}
 
-      setState(() => loading = false);
-    } catch (e) {
-      setState(() => loading = false);
-    }
+    setState(() => loading = false);
   }
 
   Future<void> _loadDonorDetails() async {
     if (donorUid.isEmpty) return;
 
     try {
-      final doc =
-      await FirebaseFirestore.instance.collection('users').doc(donorUid).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(donorUid)
+          .get();
 
       if (doc.exists) {
         final data = doc.data()!;
@@ -87,31 +88,24 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
     } catch (_) {}
   }
 
-  // 🔥 STEP 1 + 2 + 3: Confirm → delete donation → notify donor
+  // CONFIRM → DELETE DONATION → NOTIFY DONOR
   Future<void> _confirmRequest() async {
     try {
-      // STEP 1: UPDATE REQUEST STATUS
+      // STEP 1: Update request status
       await FirebaseFirestore.instance
           .collection("requests")
           .doc(widget.requestId)
           .update({"status": "Confirmed"});
 
-      // STEP 2: DELETE THE DONATION DOCUMENT
-      final donationSnap = await FirebaseFirestore.instance
-          .collection("donations")
-          .where("itemName", isEqualTo: itemName)
-          .where("donorUid", isEqualTo: donorUid)
-          .where("expiryDate", isEqualTo: expiryDate)
-          .get();
-
-      for (var doc in donationSnap.docs) {
+      // STEP 2: Delete the correct donation document using donationId
+      if (donationId.isNotEmpty) {
         await FirebaseFirestore.instance
             .collection("donations")
-            .doc(doc.id)
+            .doc(donationId)
             .delete();
       }
 
-      // STEP 3: NOTIFY DONOR
+      // STEP 3: Notify donor
       await FirebaseFirestore.instance.collection('notifications').add({
         'toUid': donorUid,
         'fromUid': receiverUid,
@@ -177,6 +171,7 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
                   _buildDetailRow("Type", type),
 
                   const Divider(height: 30),
+
                   const Text("Donor Details",
                       style: TextStyle(
                           fontWeight: FontWeight.bold, fontSize: 18)),
@@ -198,8 +193,8 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
                               horizontal: 40, vertical: 12)),
                       child: const Text(
                         "Confirm Request",
-                        style:
-                        TextStyle(color: Colors.white, fontSize: 16),
+                        style: TextStyle(
+                            color: Colors.white, fontSize: 16),
                       ),
                     ),
                   )
@@ -221,14 +216,14 @@ class _ConfirmRequestScreenState extends State<ConfirmRequestScreen> {
           Expanded(
             flex: 3,
             child: Text(label,
-                style:
-                const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 16)),
           ),
           Expanded(
             flex: 4,
             child: Text(value,
-                style:
-                const TextStyle(fontWeight: FontWeight.w500, fontSize: 16)),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w500, fontSize: 16)),
           ),
         ],
       ),

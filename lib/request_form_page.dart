@@ -49,9 +49,6 @@ class _ReceiverPageState extends State<ReceiverPage>
     }
   }
 
-  // ---------------------------------------------------------------
-  // REQUEST ITEM  (Donor notification removed as requested)
-  // ---------------------------------------------------------------
   Future<void> _requestItem(Map<String, dynamic> donorData) async {
     try {
       final correctDonorUid =
@@ -61,7 +58,6 @@ class _ReceiverPageState extends State<ReceiverPage>
         throw "Donor UID missing!";
       }
 
-      /// 1. SAVE REQUEST
       final reqRef = await FirebaseFirestore.instance
           .collection("requests")
           .add({
@@ -69,17 +65,22 @@ class _ReceiverPageState extends State<ReceiverPage>
         "receiverName": _userName,
         "receiverEmail": _userEmail,
         "receiverPhone": _userPhone,
+
         "donorUid": correctDonorUid,
         "itemName": donorData['itemName'],
         "expiryDate": donorData['expiryDate'],
         "type": donorData['type'],
-        "timestamp": FieldValue.serverTimestamp(),
-        "status": "Pending",
+
         "imageUrl": donorData['imageUrl'],
         "quantity": donorData['quantity'] ?? 1,
+
+        // *** IMPORTANT NEW FIELD ***
+        "donationId": donorData['donationId'],
+
+        "timestamp": FieldValue.serverTimestamp(),
+        "status": "Pending",
       });
 
-      /// 2. FETCH REQUEST FOR SCREEN
       final reqDoc = await FirebaseFirestore.instance
           .collection("requests")
           .doc(reqRef.id)
@@ -90,7 +91,6 @@ class _ReceiverPageState extends State<ReceiverPage>
         reqDoc.data() as Map<String, dynamic>,
       );
 
-      /// 3. OPEN REQUEST DETAILS PAGE
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -98,7 +98,6 @@ class _ReceiverPageState extends State<ReceiverPage>
         ),
       );
 
-      /// ⭐ ONLY SEND RECEIVER NOTIFICATION
       await FirebaseFirestore.instance.collection('notifications').add({
         'toUid': _userUid,
         'fromUid': _userUid,
@@ -108,8 +107,6 @@ class _ReceiverPageState extends State<ReceiverPage>
         'timestamp': FieldValue.serverTimestamp(),
         'isRead': false,
       });
-
-      /// ❌ DONOR NOTIFICATION REMOVED (per your request)
 
       setState(() {});
     } catch (e) {
@@ -143,10 +140,6 @@ class _ReceiverPageState extends State<ReceiverPage>
       );
     }
   }
-
-  // -------------------------------------------------------------------
-  // UI — UNCHANGED
-  // -------------------------------------------------------------------
 
   Widget _buildGroupedItemCard(
       String groupKey, List<Map<String, dynamic>> donors, String type) {
@@ -214,28 +207,31 @@ class _ReceiverPageState extends State<ReceiverPage>
 
                 if (alreadyRequested) {
                   final requestId = snapshot.data!.docs.first.id;
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        "Pending",
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontWeight: FontWeight.bold,
+
+                  return FittedBox(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          "Pending",
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      ElevatedButton(
-                        onPressed: () => _cancelRequest(requestId),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.redAccent,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          minimumSize: const Size(60, 30),
+                        const SizedBox(height: 4),
+                        ElevatedButton(
+                          onPressed: () => _cancelRequest(requestId),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            minimumSize: const Size(60, 30),
+                          ),
+                          child: const Text("Cancel"),
                         ),
-                        child: const Text("Cancel"),
-                      ),
-                    ],
+                      ],
+                    ),
                   );
                 }
 
@@ -273,9 +269,14 @@ class _ReceiverPageState extends State<ReceiverPage>
 
     for (var doc in docs) {
       final data = doc.data() as Map<String, dynamic>;
+
+      // *** IMPORTANT: Attach donationId to the map ***
+      data['donationId'] = doc.id;
+
       final name = data['itemName'] ?? "Unnamed Item";
       final expiry = data['expiryDate'] ?? "No Expiry";
       final key = "$name||$expiry";
+
       grouped.putIfAbsent(key, () => []).add(data);
     }
 
